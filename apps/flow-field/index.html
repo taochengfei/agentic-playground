@@ -1,0 +1,166 @@
+<!doctype html>
+<!--
+  flow-field: canvas particle animation following a smoothly evolving noise field.
+  Zero dependencies, no build step.
+  Controls:
+    click / tap  — burst particles from the pointer
+    space        — pause / resume
+    b            — toggle color mode (rainbow ↔ monochrome)
+  Runs from any static server or directly via file://
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flow-field</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0e14; overflow: hidden; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; left: 12px; bottom: 10px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(255,255,255,.45); user-select: none; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">click: burst · space: pause · b: color</div>
+<script>
+"use strict";
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const hud = document.getElementById("hud");
+
+// ── tunables ────────────────────────────────────────────────────────────────
+const PARTICLES      = 1400;
+const SPEED          = 1.6;      // px per frame at 60fps
+const TRAIL_ALPHA    = 0.045;    // fade per frame — lower = longer trails
+const NOISE_SCALE    = 0.0016;   // spatial frequency of the field
+const TIME_DRIFT     = 0.00012;  // how fast the field itself evolves
+const BURST          = 120;      // particles spawned per click
+const TWO_PI         = Math.PI * 2;
+
+// ── state ───────────────────────────────────────────────────────────────────
+let W, H, DPR;
+let particles = [];
+let paused = false;
+let rainbow = true;
+let t = 0;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width  = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  canvas.style.width  = W + "px";
+  canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = "#0b0e14";
+  ctx.fillRect(0, 0, W, H);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ── cheap layered-sine "noise" field ────────────────────────────────────────
+// Angle at (x, y) in radians; smooth in space and time, no dependencies.
+function fieldAngle(x, y) {
+  const s = NOISE_SCALE;
+  const a =
+    Math.sin(x * s + t * 0.7) * Math.cos(y * s * 1.3 - t * 0.4) +
+    Math.sin((x + y) * s * 0.5 + t * 0.2) * 0.8 +
+    Math.cos(x * s * 2.1 - y * s * 0.9 + t * 0.9) * 0.35;
+  return a * 1.9; // map to roughly [-~6, ~6] rad for curling motion
+}
+
+// ── particles ───────────────────────────────────────────────────────────────
+function spawn(x, y, speedBoost = 1) {
+  const hue = rainbow ? (x * 0.12 + y * 0.18 + t * 40) % 360 : 200;
+  return {
+    x: x ?? Math.random() * W,
+    y: y ?? Math.random() * H,
+    px: 0, py: 0,
+    speed: (0.5 + Math.random() * 1.1) * speedBoost,
+    hue,
+    life: 240 + Math.random() * 360, // frames before respawn
+  };
+}
+function reset(p) {
+  const n = spawn();
+  p.x = n.x; p.y = n.y; p.speed = n.speed; p.hue = n.hue; p.life = n.life;
+}
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < PARTICLES; i++) particles.push(spawn());
+}
+initParticles();
+
+function step() {
+  t += TIME_DRIFT * 16;
+  // fade previous frame for the trail effect
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = `rgba(11, 14, 20, ${TRAIL_ALPHA})`;
+  ctx.fillRect(0, 0, W, H);
+  // additive-ish glowing strokes
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineWidth = 1.1;
+
+  const dt = 1; // normalized to 60fps
+  for (const p of particles) {
+    p.px = p.x; p.py = p.y;
+    const a = fieldAngle(p.x, p.y);
+    p.x += Math.cos(a) * SPEED * p.speed * dt;
+    p.y += Math.sin(a) * SPEED * p.speed * dt;
+    p.life -= 1;
+
+    // respawn when off-screen or expired (keeps density even)
+    if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10 || p.life <= 0) {
+      reset(p);
+      continue;
+    }
+
+    if (rainbow) {
+      p.hue = (p.hue + 0.35) % 360;
+      ctx.strokeStyle = `hsla(${p.hue}, 85%, 62%, 0.5)`;
+    } else {
+      ctx.strokeStyle = "hsla(205, 90%, 68%, 0.5)";
+    }
+    ctx.beginPath();
+    ctx.moveTo(p.px, p.py);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+}
+
+function frame() {
+  if (!paused) step();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── controls ────────────────────────────────────────────────────────────────
+function burstAt(x, y) {
+  for (let i = 0; i < BURST; i++) {
+    const p = particles[(Math.random() * particles.length) | 0];
+    p.x = x + (Math.random() - 0.5) * 12;
+    p.y = y + (Math.random() - 0.5) * 12;
+    p.speed = 1.5 + Math.random() * 2.5;
+    p.life = 120 + Math.random() * 200;
+  }
+}
+canvas.addEventListener("pointerdown", (e) => burstAt(e.clientX, e.clientY));
+
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    paused = !paused;
+    hud.textContent = paused ? "paused · space: resume" : "click: burst · space: pause · b: color";
+  } else if (e.key === "b" || e.key === "B") {
+    rainbow = !rainbow;
+  }
+});
+</script>
+</body>
+</html>
