@@ -1,0 +1,392 @@
+<!doctype html>
+<!--
+  cmb: "the receding shell" — the CMB as the boundary of the observable universe.
+
+  You are at the center. The sky IS the surface of last scattering: the spherical
+  shell where the universe first became transparent 380,000 years after the Big Bang.
+  As "now" (observer time) advances, the shell whose light reaches you *right now*
+  recedes outward, and the pattern on it shifts — revealing what that farther
+  region of the universe looked like just before it turned transparent.
+
+  Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
+  Controls:
+    drag          — look around the sky
+    slider        — advance "now" (observer cosmic time, 10.0 → 13.8 Gyr)
+    space         — play / pause the receding shell
+  The pattern is a synthesized CMB-like field (Gaussian modes with an
+  acoustic-peak-shaped spectrum), not the real Planck map.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cmb — the receding shell</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070c; overflow: hidden; }
+  canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+  #fx { pointer-events: none; }
+  #hud {
+    position: fixed; left: 14px; top: 12px; max-width: 430px;
+    font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(235,240,255,.88); user-select: none; pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  }
+  #hud h1 { font-size: 13px; margin: 0 0 6px; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+  #hud .row b { color: #ffd27a; font-weight: 600; }
+  #hud .note { margin-top: 8px; color: rgba(235,240,255,.55); }
+  #controls {
+    position: fixed; left: 14px; bottom: 14px; width: min(430px, calc(100vw - 28px));
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(235,240,255,.85);
+  }
+  #controls input[type=range] { width: 100%; accent-color: #ffd27a; }
+  #controls .hint { color: rgba(235,240,255,.45); margin-top: 4px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="fx"></canvas>
+
+<div id="hud">
+  <h1>Surface of last scattering</h1>
+  <div class="row">now (observer time) &nbsp;<b id="hudNow">13.80 Gyr</b></div>
+  <div class="row">shell distance &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b id="hudDist">46.0 billion ly (comoving)</b></div>
+  <div class="row">light on this shell was emitted <b>380,000 yr</b> after the Big Bang</div>
+  <div class="row">travel time <b id="hudTravel">13.80 Gyr</b> — arriving now</div>
+  <div class="note">
+    You sit at the center. The sky you see is a spherical shell — the boundary of
+    what can ever be observed. As "now" advances, that shell recedes: light from
+    farther and farther regions, released 380,000 years after the Big Bang, reaches
+    you today. The pattern is a synthesized CMB-like field (Gaussian modes shaped
+    like the acoustic peaks), not the real Planck map.
+  </div>
+</div>
+
+<div id="controls">
+  <label for="time">now: <span id="timeLabel">13.80 Gyr</span> after the Big Bang</label>
+  <input id="time" type="range" min="10" max="13.8" step="0.005" value="13.8">
+  <div class="hint">drag: look around · space: play/pause the receding shell</div>
+</div>
+
+<script>
+"use strict";
+// ─────────────────────────────────────────────────────────────────────────────
+// 1) Synthesize a CMB-like field on an equirectangular grid.
+//    Random plane waves on the sphere; frequencies drawn from a distribution
+//    shaped like the CMB acoustic spectrum (peak near 1° scale ≈ ℓ 200),
+//    plus a little large-scale and fine-scale content.
+// ─────────────────────────────────────────────────────────────────────────────
+const TEX_W = 1024, TEX_H = 512;
+
+function makeModes(rng) {
+  const modes = [];
+  function addBand(count, fMin, fMax, amp) {
+    for (let i = 0; i < count; i++) {
+      // random unit direction
+      const u = rng() * 2 - 1, ph = rng() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+      const f = fMin + rng() * (fMax - fMin);
+      modes.push({
+        x: s * Math.cos(ph), y: u, z: s * Math.sin(ph),
+        f, a: amp * (0.6 + rng() * 0.8), p: rng() * Math.PI * 2
+      });
+    }
+  }
+  addBand(6, 0.6, 2.2, 0.55);   // large-scale (Sachs–Wolfe-ish)
+  addBand(86, 42, 78, 1.0);     // acoustic peak region (~1°)
+  addBand(26, 120, 320, 0.30);  // fine structure
+  return modes;
+}
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Planck-style diverging palette: cold blue → white → hot red.
+const STOPS = [
+  [-3.0, [16, 32, 96]],
+  [-1.6, [56, 104, 192]],
+  [-0.6, [168, 200, 240]],
+  [ 0.0, [248, 248, 244]],
+  [ 0.6, [248, 214, 150]],
+  [ 1.6, [238, 128, 62]],
+  [ 3.0, [150, 24, 20]],
+];
+function palette(z) {
+  if (z <= STOPS[0][0]) return STOPS[0][1];
+  for (let i = 1; i < STOPS.length; i++) {
+    if (z <= STOPS[i][0]) {
+      const [z0, c0] = STOPS[i - 1], [z1, c1] = STOPS[i];
+      const t = (z - z0) / (z1 - z0);
+      return [c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t];
+    }
+  }
+  return STOPS[STOPS.length - 1][1];
+}
+
+function synthesizeCMB() {
+  const rng = mulberry32(138000);
+  const modes = makeModes(rng);
+  const field = new Float32Array(TEX_W * TEX_H);
+  let sum = 0, sum2 = 0;
+  for (let j = 0; j < TEX_H; j++) {
+    const theta = (j + 0.5) / TEX_H * Math.PI;
+    const st = Math.sin(theta), ct = Math.cos(theta);
+    for (let i = 0; i < TEX_W; i++) {
+      const phi = (i + 0.5) / TEX_W * 2 * Math.PI;
+      const dx = st * Math.cos(phi), dy = ct, dz = st * Math.sin(phi);
+      let v = 0;
+      for (let k = 0; k < modes.length; k++) {
+        const m = modes[k];
+        v += m.a * Math.sin(m.f * (m.x * dx + m.y * dy + m.z * dz) + m.p);
+      }
+      field[j * TEX_W + i] = v;
+      sum += v; sum2 += v * v;
+    }
+  }
+  const n = field.length;
+  const mean = sum / n, sd = Math.sqrt(Math.max(sum2 / n - mean * mean, 1e-9));
+  const px = new Uint8Array(TEX_W * TEX_H * 4);
+  for (let i = 0; i < n; i++) {
+    const [r, g, b] = palette((field[i] - mean) / sd);
+    // +0.5 before truncation = round-to-nearest (Uint8 stores drop the fraction)
+    px[i * 4] = r + 0.5; px[i * 4 + 1] = g + 0.5; px[i * 4 + 2] = b + 0.5; px[i * 4 + 3] = 255;
+  }
+  return px;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2) WebGL: render the field as an inside-out sky (camera at the sphere center).
+// ─────────────────────────────────────────────────────────────────────────────
+const glc = document.getElementById("c");
+const gl = glc.getContext("webgl", { antialias: true });
+const fxc = document.getElementById("fx");
+const fx = fxc.getContext("2d");
+
+const VERT = `
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+const FRAG = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform mat3 u_rot;
+uniform float u_aspect;
+uniform float u_fov;   // tan(half vertical fov)
+uniform float u_drift; // radians of pattern shift as the shell recedes
+void main() {
+  vec2 p = (v_uv - 0.5) * 2.0;
+  p.x *= u_aspect;
+  vec3 dir = normalize(u_rot * vec3(p, u_fov));
+  float theta = acos(clamp(dir.y, -1.0, 1.0));
+  float phi = atan(dir.z, dir.x) + u_drift;
+  vec2 uv = vec2(phi / 6.28318530718 + 0.5, theta / 3.14159265359);
+  vec3 col = texture2D(u_tex, uv).rgb;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const locPos = gl.getAttribLocation(prog, "a_pos");
+gl.enableVertexAttribArray(locPos);
+gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
+
+const locTex = gl.getUniformLocation(prog, "u_tex");
+const locRot = gl.getUniformLocation(prog, "u_rot");
+const locAspect = gl.getUniformLocation(prog, "u_aspect");
+const locFov = gl.getUniformLocation(prog, "u_fov");
+const locDrift = gl.getUniformLocation(prog, "u_drift");
+const FOV = 0.9; // tan of half vertical fov (~77°)
+
+const tex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, TEX_W, TEX_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, synthesizeCMB());
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.uniform1i(locTex, 0);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3) World → screen. The camera sits at the origin looking along +Z;
+//    u_rot = Ry(yaw)·Rx(pitch) maps screen rays to world directions; its
+//    transpose maps world points into camera space for the photon overlay.
+// ─────────────────────────────────────────────────────────────────────────────
+let yaw = 0.6, pitch = -0.15;
+const rotBuf = new Float32Array(9);
+function rotMatrix(yaw, pitch) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const cx = Math.cos(pitch), sx = Math.sin(pitch);
+  // Ry·Rx, stored column-major for uniformMatrix3fv (reused buffer: hot path)
+  rotBuf[0] = cy;        rotBuf[1] = 0;     rotBuf[2] = -sy;
+  rotBuf[3] = sy * sx;   rotBuf[4] = cx;    rotBuf[5] = cy * sx;
+  rotBuf[6] = sy * cx;   rotBuf[7] = -sx;   rotBuf[8] = cy * cx;
+  return rotBuf;
+}
+let W = 0, H = 0;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  for (const c of [glc, fxc]) {
+    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+    c.style.width = W + "px"; c.style.height = H + "px";
+  }
+  gl.viewport(0, 0, glc.width, glc.height);
+  fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4) Time & the shell. "now" = observer cosmic time. The shell whose
+//    recombination light arrives at "now" sits at a comoving distance that
+//    grows with now; we render that as a receding radius plus a pattern drift
+//    (each direction now corresponds to a farther comoving region).
+// ─────────────────────────────────────────────────────────────────────────────
+const T_NOW_MAX = 13.8;
+let tNow = T_NOW_MAX;
+let playing = false;
+
+const slider = document.getElementById("time");
+const timeLabel = document.getElementById("timeLabel");
+const hudNow = document.getElementById("hudNow");
+const hudDist = document.getElementById("hudDist");
+const hudTravel = document.getElementById("hudTravel");
+
+function shellGly(t) { return 46.0 * Math.pow(t / T_NOW_MAX, 1.25); } // schematic
+function shellRadius(t) { return 9 + 14 * (shellGly(t) / 46.0); }    // scene units
+function shellDrift(t) { return 0.35 * (1 - shellGly(t) / 46.0); }   // pattern shift
+
+function updateTimeUI() {
+  const d = shellGly(tNow);
+  timeLabel.textContent = tNow.toFixed(2) + " Gyr";
+  hudNow.textContent = tNow.toFixed(2) + " Gyr";
+  hudDist.textContent = d.toFixed(1) + " billion ly (comoving)";
+  hudTravel.textContent = tNow.toFixed(2) + " Gyr";
+  slider.value = tNow;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5) Photons: light released on the shell, arriving at you right now.
+//    Streaks run from the shell (current radius) toward the camera at center.
+// ─────────────────────────────────────────────────────────────────────────────
+const PHOTONS = 220;
+const photons = [];
+function newPhoton() {
+  const u = Math.random() * 2 - 1, ph = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+  return { d: [s * Math.cos(ph), u, s * Math.sin(ph)], s: Math.random(), v: 0.002 + Math.random() * 0.004 };
+}
+for (let i = 0; i < PHOTONS; i++) photons.push(newPhoton());
+
+function project(p, m) {
+  // camera-space point = Mᵀ·p (u_rot maps screen rays → world, so its
+  // transpose maps world → camera). Round-trip verified against the shader.
+  const x = m[0] * p[0] + m[1] * p[1] + m[2] * p[2];
+  const y = m[3] * p[0] + m[4] * p[1] + m[5] * p[2];
+  const z = m[6] * p[0] + m[7] * p[1] + m[8] * p[2];
+  if (z < 0.25) return null;
+  const scale = (H / 2) * FOV;
+  return [W / 2 + (x / z) * scale, H / 2 - (y / z) * scale];
+}
+
+function drawPhotons(m, rShell) {
+  fx.clearRect(0, 0, W, H);
+  fx.lineCap = "round";
+  for (const p of photons) {
+    p.s += p.v;
+    if (p.s >= 1) { Object.assign(p, newPhoton(), { s: 0 }); }
+    const r = rShell * (1 - p.s);
+    const pos = [p.d[0] * r, p.d[1] * r, p.d[2] * r];
+    const a = project(pos, m);
+    if (!a) continue;
+    const closeness = 1 - p.s;              // 1 on the shell → 0 at you
+    const len = 6 + 26 * (1 - closeness);   // longer streaks near arrival
+    const alpha = 0.10 + 0.5 * (1 - closeness);
+    const dx = (W / 2 - a[0]), dy = (H / 2 - a[1]);
+    const n = Math.hypot(dx, dy) || 1;
+    fx.strokeStyle = `rgba(255, 235, 190, ${alpha.toFixed(3)})`;
+    fx.lineWidth = closeness < 0.12 ? 2.2 : 1.1;
+    fx.beginPath();
+    fx.moveTo(a[0], a[1]);
+    fx.lineTo(a[0] + (dx / n) * len, a[1] + (dy / n) * len);
+    fx.stroke();
+    if (closeness < 0.06) { // arrival flash at your eye
+      fx.fillStyle = `rgba(255, 245, 220, ${0.35 * (1 - closeness / 0.06)})`;
+      fx.beginPath(); fx.arc(W / 2, H / 2, 3 + 10 * (1 - closeness / 0.06), 0, 7); fx.fill();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6) Main loop
+// ─────────────────────────────────────────────────────────────────────────────
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  if (playing) {
+    tNow += dt * 0.35;
+    if (tNow >= T_NOW_MAX) tNow = 10;
+    updateTimeUI();
+  }
+  const m = rotMatrix(yaw, pitch);
+  gl.uniformMatrix3fv(locRot, false, m);
+  gl.uniform1f(locAspect, W / H);
+  gl.uniform1f(locFov, FOV);
+  gl.uniform1f(locDrift, shellDrift(tNow));
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  drawPhotons(m, shellRadius(tNow));
+  requestAnimationFrame(frame);
+}
+updateTimeUI();
+requestAnimationFrame(frame);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7) Input
+// ─────────────────────────────────────────────────────────────────────────────
+slider.addEventListener("input", () => {
+  tNow = parseFloat(slider.value);
+  playing = false;
+  updateTimeUI();
+});
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space") { e.preventDefault(); playing = !playing; }
+});
+let dragging = false, lx = 0, ly = 0;
+window.addEventListener("pointerdown", (e) => {
+  if (e.target !== glc) return; // don't rotate while using the slider
+  dragging = true; lx = e.clientX; ly = e.clientY;
+});
+window.addEventListener("pointerup", () => { dragging = false; });
+window.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  yaw += (e.clientX - lx) * 0.004;
+  pitch = Math.max(-1.45, Math.min(1.45, pitch + (e.clientY - ly) * 0.004));
+  lx = e.clientX; ly = e.clientY;
+});
+</script>
+</body>
+</html>
