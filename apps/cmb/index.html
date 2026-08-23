@@ -7,10 +7,13 @@
   of last scattering — the spherical shell where the universe first became
   transparent 380,000 years after the Big Bang. The point at its center is US:
   the observer. Light released on the shell converges on that point and is
-  arriving right now. As "now" (observer time) advances, the shell grows:
-  the light only now reaching us comes from farther and farther regions, and
-  the pattern on the shell shifts — revealing what that farther region looked
-  like just before it turned transparent.
+  arriving right now. The space around the shell is not empty: it is
+  pre-recombination plasma, not yet transparent to us, so it glows like the
+  shell itself (dimmed and desaturated). Inside the shell, galaxies of our
+  observable universe sit at fixed comoving positions — as "now" advances and
+  the shell grows, more of them come into view. The pattern on the shell
+  shifts as it recedes — revealing what that farther region looked like just
+  before it turned transparent.
 
   Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
   Controls:
@@ -69,12 +72,14 @@
   <div class="row">travel time <b id="hudTravel">13.80 Gyr</b> — arriving now</div>
   <div class="note">
     God's-eye view from beyond the horizon. The glowing sphere is the boundary
-    of our observable universe. The point at its center is us — the observer.
-    Light released on this shell 380,000 years after the Big Bang converges on
-    that point, arriving now. As "now" advances the shell grows: the light only
-    now reaching us comes from farther and farther regions. The pattern is a
-    synthesized CMB-like field (Gaussian modes shaped like the acoustic peaks),
-    not the real Planck map.
+    of our observable universe; the space around it is pre-recombination
+    plasma — not yet transparent to us, so it glows like the shell itself.
+    The faint smudges inside are galaxies at their comoving positions: as
+    "now" advances and the shell grows, more of them come into view. The point
+    at the shell's center is us — light released on it 380,000 years after the
+    Big Bang converges there, arriving now. The pattern is a synthesized CMB-
+    like field (Gaussian modes shaped like the acoustic peaks), not the real
+    Planck map.
   </div>
 </div>
 
@@ -206,32 +211,20 @@ uniform float u_drift;   // radians of pattern shift as the shell recedes
 uniform float u_camDist; // god's-eye camera distance from the shell center
 uniform float u_shellR;  // current shell radius (scene units)
 
-float hash2(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
 void main() {
   vec2 p = (v_uv - 0.5) * 2.0;
   p.x *= u_aspect;
   vec3 rd = normalize(u_rot * vec3(p, u_fov));
   vec3 ro = -u_camDist * u_rot[2]; // camera outside the shell, looking at center
 
-  // ── background: the void beyond our horizon, with faint stars ──
-  vec3 col = vec3(0.012, 0.016, 0.030);
-  vec2 sd_uv = vec2(atan(rd.z, rd.x) / 6.28318530718 + 0.5,
+  // ── background: the space beyond the shell. Not yet transparent to us —
+  //    pre-recombination plasma — so it glows like the CMB field itself,
+  //    dimmed and desaturated to recede behind the shell. ──
+  vec2 bg_uv = vec2(atan(rd.z, rd.x) / 6.28318530718 + 0.5,
                     acos(clamp(rd.y, -1.0, 1.0)) / 3.14159265359);
-  vec2 g2 = floor(sd_uv * vec2(240.0, 120.0));
-  float h1 = hash2(g2);
-  if (h1 > 0.9895) {
-    float h2 = hash2(g2 + 13.7);
-    float h3 = hash2(g2 + 41.3);
-    vec2 suv = (g2 + 0.5 + (vec2(h2, h3) - 0.5) * 0.8) / vec2(240.0, 120.0);
-    float sphi = (suv.x - 0.5) * 6.28318530718;
-    float sth = suv.y * 3.14159265359;
-    vec3 sdir = vec3(sin(sth) * cos(sphi), cos(sth), sin(sth) * sin(sphi));
-    float d = acos(clamp(dot(rd, sdir), -1.0, 1.0));
-    col += vec3(0.72, 0.78, 0.95) * smoothstep(0.006, 0.0, d) * (0.15 + 0.40 * h2);
-  }
+  vec3 bgTex = texture2D(u_tex, bg_uv).rgb;
+  float bgLum = dot(bgTex, vec3(0.299, 0.587, 0.114));
+  vec3 col = mix(vec3(bgLum), bgTex, 0.5) * 0.5;
 
   // ── intersect the shell (sphere of radius u_shellR at the origin) ──
   float b = dot(ro, rd);
@@ -254,7 +247,8 @@ void main() {
     // rim glow: from outside, the shell reads as a luminous membrane
     float rim = pow(1.0 - max(dot(-rd, n), 0.0), 3.0);
     sky += vec3(0.45, 0.65, 1.0) * rim * 0.4;
-    col = mix(col, sky, cover);
+    // slightly translucent: the plasma beyond shows through the membrane
+    col = mix(col, sky, cover * 0.88);
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -385,7 +379,6 @@ function project(p, m) {
 }
 
 function drawPhotons(m, rShell) {
-  fx.clearRect(0, 0, W, H);
   fx.lineCap = "round";
   // the observer ("you") at the shell's center — the photons converge here
   fx.fillStyle = "rgba(255,255,255,0.45)";
@@ -416,7 +409,64 @@ function drawPhotons(m, rShell) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6) Main loop
+// 6) Galaxies: smudges of light inside the shell — the contents of our
+//    observable universe. Each sits at a fixed COMOVING position (scene units,
+//    within the max shell radius); a galaxy is only visible once the growing
+//    shell passes its radius — so the interior fills in as "now" advances.
+// ─────────────────────────────────────────────────────────────────────────────
+const GALAXIES = 350;
+const MAX_SHELL_R = 23; // shellRadius(T_NOW_MAX)
+function makeGalaxySprite(core, halo) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const x = c.getContext("2d");
+  const grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0.0, `rgba(${core},1)`);
+  grad.addColorStop(0.22, `rgba(${core},0.5)`);
+  grad.addColorStop(0.5, `rgba(${halo},0.20)`);
+  grad.addColorStop(1.0, `rgba(${halo},0)`);
+  x.fillStyle = grad;
+  x.fillRect(0, 0, 64, 64);
+  return c;
+}
+const spriteCool = makeGalaxySprite("255,255,255", "150,180,255");
+const spriteWarm = makeGalaxySprite("255,250,235", "255,205,130");
+const galaxies = [];
+for (let i = 0; i < GALAXIES; i++) {
+  const u = Math.random() * 2 - 1, ph = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+  galaxies.push({
+    d: [s * Math.cos(ph), u, s * Math.sin(ph)],
+    comoving: (0.05 + 0.94 * Math.cbrt(Math.random())) * MAX_SHELL_R,
+    size: 2.2 + Math.random() * 3,
+    stretch: 0.3 + Math.random() * 0.7,
+    angle: Math.random() * Math.PI,
+    sprite: Math.random() < 0.45 ? spriteWarm : spriteCool,
+    alpha: 0.30 + Math.random() * 0.4,
+  });
+}
+function drawGalaxies(m, rShell) {
+  for (const g of galaxies) {
+    if (g.comoving >= rShell) continue; // not yet inside the observable shell
+    const p = [g.d[0] * g.comoving, g.d[1] * g.comoving, g.d[2] * g.comoving];
+    const a = project(p, m);
+    if (!a) continue;
+    const z = m[6] * p[0] + m[7] * p[1] + m[8] * p[2] + CAM_DIST;
+    const size = g.size * (CAM_DIST / z);
+    if (size < 1.3) continue;
+    const edge = Math.min(1, (1 - g.comoving / rShell) / 0.15); // fade at the rim
+    fx.globalAlpha = g.alpha * edge;
+    fx.save();
+    fx.translate(a[0], a[1]);
+    fx.rotate(g.angle);
+    fx.scale(1, g.stretch);
+    fx.drawImage(g.sprite, -size, -size, size * 2, size * 2);
+    fx.restore();
+  }
+  fx.globalAlpha = 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7) Main loop
 // ─────────────────────────────────────────────────────────────────────────────
 let last = performance.now();
 function frame(now) {
@@ -435,6 +485,8 @@ function frame(now) {
   gl.uniform1f(locDrift, shellDrift(tNow));
   gl.uniform1f(locShellR, rShell);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+  fx.clearRect(0, 0, W, H);
+  drawGalaxies(m, rShell);
   drawPhotons(m, rShell);
   requestAnimationFrame(frame);
 }
@@ -442,7 +494,7 @@ updateTimeUI();
 requestAnimationFrame(frame);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7) Input
+// 8) Input
 // ─────────────────────────────────────────────────────────────────────────────
 slider.addEventListener("input", () => {
   tNow = parseFloat(slider.value);

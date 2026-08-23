@@ -11,9 +11,14 @@ point and the pattern on it shifts: the light only now reaching us comes from a
 farther comoving region of the shell, revealing what that region looked like
 just before it turned transparent.
 
+The space around the shell is not empty: it is pre-recombination plasma, not
+yet transparent to us, so it is rendered as the same CMB-like field, dimmed and
+desaturated. Inside the shell, faint galaxy smudges sit at fixed comoving
+positions — as the shell grows, more of them come into view.
+
 - Rendering: WebGL1 ray–sphere intersection (camera orbits outside the shell,
-  always looking at the center; procedural starfield in the void beyond) + 2D
-  canvas photon overlay. Zero dependencies, no build step.
+  always looking at the center) + 2D canvas overlay for galaxies and photons.
+  Zero dependencies, no build step.
 - The CMB pattern is **synthesized**: random spherical modes with a frequency
   distribution shaped like the acoustic peaks — CMB-like, not the real Planck map.
 - The shell distance/time relation (`shellGly`) is a schematic power law, not a
