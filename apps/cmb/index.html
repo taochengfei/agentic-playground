@@ -11,7 +11,7 @@
   Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
   Controls:
     drag          — look around the sky
-    slider        — advance "now" (observer cosmic time, 10.0 → 13.8 Gyr)
+    slider        — advance "now" (observer cosmic time, 0.0 → 13.8 Gyr)
     space         — play / pause the receding shell
   The pattern is a synthesized CMB-like field (Gaussian modes with an
   acoustic-peak-shaped spectrum), not the real Planck map.
@@ -74,7 +74,7 @@
 
 <div id="controls">
   <label for="time">now: <span id="timeLabel">13.80 Gyr</span> after the Big Bang</label>
-  <input id="time" type="range" min="10" max="13.8" step="0.005" value="13.8">
+  <input id="time" type="range" min="0" max="13.8" step="0.005" value="13.8">
   <div class="hint">drag: look around · space: play/pause the receding shell</div>
 </div>
 
@@ -359,7 +359,7 @@ function frame(now) {
   last = now;
   if (playing) {
     tNow += dt * 0.35;
-    if (tNow >= T_NOW_MAX) tNow = 10;
+    if (tNow >= T_NOW_MAX) tNow = 0;
     updateTimeUI();
   }
   const m = rotMatrix(yaw, pitch);

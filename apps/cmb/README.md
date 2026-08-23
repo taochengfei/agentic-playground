@@ -21,7 +21,7 @@ arriving today.
 | Input | Effect |
 |---|---|
 | drag | look around the sky |
-| slider | set "now" (10.0 → 13.8 Gyr) |
+| slider | set "now" (0.0 → 13.8 Gyr) |
 | space | play/pause — the shell recedes as now advances |
 
 ## Run
