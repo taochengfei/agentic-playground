@@ -8,7 +8,7 @@ Each app lives in `apps/<name>/` and runs directly in the browser.
 
 | App | What it is |
 |---|---|
-| [`apps/cmb`](apps/cmb) | The CMB as the receding boundary of the observable universe (WebGL, zero dependencies) |
+| [`apps/cmb`](apps/cmb) | God's-eye view of the CMB as the receding boundary of the observable universe (WebGL, zero dependencies) |
 | [`apps/flow-field`](apps/flow-field) | Canvas particle flow-field animation (vanilla JS, zero dependencies) |
 
 ## Quick start

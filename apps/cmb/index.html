@@ -1,16 +1,20 @@
 <!doctype html>
 <!--
-  cmb: "the receding shell" — the CMB as the boundary of the observable universe.
+  cmb: "the receding shell" — god's-eye view of the CMB as the boundary of the
+  observable universe.
 
-  You are at the center. The sky IS the surface of last scattering: the spherical
-  shell where the universe first became transparent 380,000 years after the Big Bang.
-  As "now" (observer time) advances, the shell whose light reaches you *right now*
-  recedes outward, and the pattern on it shifts — revealing what that farther
-  region of the universe looked like just before it turned transparent.
+  You float outside the observable universe. The glowing sphere is the surface
+  of last scattering — the spherical shell where the universe first became
+  transparent 380,000 years after the Big Bang. The point at its center is US:
+  the observer. Light released on the shell converges on that point and is
+  arriving right now. As "now" (observer time) advances, the shell grows:
+  the light only now reaching us comes from farther and farther regions, and
+  the pattern on the shell shifts — revealing what that farther region looked
+  like just before it turned transparent.
 
   Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
   Controls:
-    drag          — look around the sky
+    drag          — orbit the view around the shell
     slider        — advance "now" (observer cosmic time, 0.0 → 13.8 Gyr)
     space         — play / pause the receding shell
   The pattern is a synthesized CMB-like field (Gaussian modes with an
@@ -64,18 +68,20 @@
   <div class="row">light on this shell was emitted <b>380,000 yr</b> after the Big Bang</div>
   <div class="row">travel time <b id="hudTravel">13.80 Gyr</b> — arriving now</div>
   <div class="note">
-    You sit at the center. The sky you see is a spherical shell — the boundary of
-    what can ever be observed. As "now" advances, that shell recedes: light from
-    farther and farther regions, released 380,000 years after the Big Bang, reaches
-    you today. The pattern is a synthesized CMB-like field (Gaussian modes shaped
-    like the acoustic peaks), not the real Planck map.
+    God's-eye view from beyond the horizon. The glowing sphere is the boundary
+    of our observable universe. The point at its center is us — the observer.
+    Light released on this shell 380,000 years after the Big Bang converges on
+    that point, arriving now. As "now" advances the shell grows: the light only
+    now reaching us comes from farther and farther regions. The pattern is a
+    synthesized CMB-like field (Gaussian modes shaped like the acoustic peaks),
+    not the real Planck map.
   </div>
 </div>
 
 <div id="controls">
   <label for="time">now: <span id="timeLabel">13.80 Gyr</span> after the Big Bang</label>
   <input id="time" type="range" min="0" max="13.8" step="0.005" value="13.8">
-  <div class="hint">drag: look around · space: play/pause the receding shell</div>
+  <div class="hint">drag: orbit the shell · space: play/pause</div>
 </div>
 
 <script>
@@ -170,10 +176,12 @@ function synthesizeCMB() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2) WebGL: render the field as an inside-out sky (camera at the sphere center).
+// 2) WebGL: render the shell as a CMB-textured sphere seen from OUTSIDE —
+//    a god's-eye camera orbiting beyond it, always looking at the center.
 // ─────────────────────────────────────────────────────────────────────────────
 const glc = document.getElementById("c");
 const gl = glc.getContext("webgl", { antialias: true });
+gl.getExtension("OES_standard_derivatives"); // optional: antialiased silhouette
 const fxc = document.getElementById("fx");
 const fx = fxc.getContext("2d");
 
@@ -185,21 +193,69 @@ void main() {
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }`;
 const FRAG = `
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
 precision highp float;
 varying vec2 v_uv;
 uniform sampler2D u_tex;
 uniform mat3 u_rot;
 uniform float u_aspect;
-uniform float u_fov;   // tan(half vertical fov)
-uniform float u_drift; // radians of pattern shift as the shell recedes
+uniform float u_fov;     // tan(half vertical fov)
+uniform float u_drift;   // radians of pattern shift as the shell recedes
+uniform float u_camDist; // god's-eye camera distance from the shell center
+uniform float u_shellR;  // current shell radius (scene units)
+
+float hash2(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
 void main() {
   vec2 p = (v_uv - 0.5) * 2.0;
   p.x *= u_aspect;
-  vec3 dir = normalize(u_rot * vec3(p, u_fov));
-  float theta = acos(clamp(dir.y, -1.0, 1.0));
-  float phi = atan(dir.z, dir.x) + u_drift;
-  vec2 uv = vec2(phi / 6.28318530718 + 0.5, theta / 3.14159265359);
-  vec3 col = texture2D(u_tex, uv).rgb;
+  vec3 rd = normalize(u_rot * vec3(p, u_fov));
+  vec3 ro = -u_camDist * u_rot[2]; // camera outside the shell, looking at center
+
+  // ── background: the void beyond our horizon, with faint stars ──
+  vec3 col = vec3(0.012, 0.016, 0.030);
+  vec2 sd_uv = vec2(atan(rd.z, rd.x) / 6.28318530718 + 0.5,
+                    acos(clamp(rd.y, -1.0, 1.0)) / 3.14159265359);
+  vec2 g2 = floor(sd_uv * vec2(240.0, 120.0));
+  float h1 = hash2(g2);
+  if (h1 > 0.9895) {
+    float h2 = hash2(g2 + 13.7);
+    float h3 = hash2(g2 + 41.3);
+    vec2 suv = (g2 + 0.5 + (vec2(h2, h3) - 0.5) * 0.8) / vec2(240.0, 120.0);
+    float sphi = (suv.x - 0.5) * 6.28318530718;
+    float sth = suv.y * 3.14159265359;
+    vec3 sdir = vec3(sin(sth) * cos(sphi), cos(sth), sin(sth) * sin(sphi));
+    float d = acos(clamp(dot(rd, sdir), -1.0, 1.0));
+    col += vec3(0.72, 0.78, 0.95) * smoothstep(0.006, 0.0, d) * (0.15 + 0.40 * h2);
+  }
+
+  // ── intersect the shell (sphere of radius u_shellR at the origin) ──
+  float b = dot(ro, rd);
+  float c = dot(ro, ro) - u_shellR * u_shellR;
+  float disc = b * b - c;
+  float aa = 1.0;
+#ifdef GL_OES_standard_derivatives
+  aa = fwidth(disc) * 2.0 + 1e-4;
+#endif
+  float t1 = -b - sqrt(max(disc, 0.0));
+  float cover = (t1 > 0.0) ? smoothstep(-aa, aa, disc) : 0.0;
+
+  if (cover > 0.0) {
+    vec3 hp = ro + t1 * rd;
+    vec3 n = hp / u_shellR;
+    float theta = acos(clamp(n.y, -1.0, 1.0));
+    float phi = atan(n.z, n.x) + u_drift;
+    vec2 uv = vec2(phi / 6.28318530718 + 0.5, theta / 3.14159265359);
+    vec3 sky = texture2D(u_tex, uv).rgb;
+    // rim glow: from outside, the shell reads as a luminous membrane
+    float rim = pow(1.0 - max(dot(-rd, n), 0.0), 3.0);
+    sky += vec3(0.45, 0.65, 1.0) * rim * 0.4;
+    col = mix(col, sky, cover);
+  }
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -228,7 +284,11 @@ const locRot = gl.getUniformLocation(prog, "u_rot");
 const locAspect = gl.getUniformLocation(prog, "u_aspect");
 const locFov = gl.getUniformLocation(prog, "u_fov");
 const locDrift = gl.getUniformLocation(prog, "u_drift");
-const FOV = 0.9; // tan of half vertical fov (~77°)
+const locCamDist = gl.getUniformLocation(prog, "u_camDist");
+const locShellR = gl.getUniformLocation(prog, "u_shellR");
+const FOV = 0.9;  // tan of half vertical fov (~77°)
+const CAM_DIST = 42; // god's-eye camera distance (always > max shell radius 23)
+gl.uniform1f(locCamDist, CAM_DIST);
 
 const tex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -241,9 +301,10 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.uniform1i(locTex, 0);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3) World → screen. The camera sits at the origin looking along +Z;
-//    u_rot = Ry(yaw)·Rx(pitch) maps screen rays to world directions; its
-//    transpose maps world points into camera space for the photon overlay.
+// 3) World → screen. God's-eye camera: u_rot = Ry(yaw)·Rx(pitch); the camera
+//    sits at -CAM_DIST·(third column of u_rot) — outside the shell — and looks
+//    at the center. u_rot maps screen rays to world directions; world → camera
+//    space for the photon overlay is Mᵀ·p shifted by the camera position.
 // ─────────────────────────────────────────────────────────────────────────────
 let yaw = 0.6, pitch = -0.15;
 const rotBuf = new Float32Array(9);
@@ -287,7 +348,7 @@ const hudDist = document.getElementById("hudDist");
 const hudTravel = document.getElementById("hudTravel");
 
 function shellGly(t) { return 46.0 * Math.pow(t / T_NOW_MAX, 1.25); } // schematic
-function shellRadius(t) { return 9 + 14 * (shellGly(t) / 46.0); }    // scene units
+function shellRadius(t) { return 1 + 22 * (shellGly(t) / 46.0); }    // scene units, < CAM_DIST
 function shellDrift(t) { return 0.35 * (1 - shellGly(t) / 46.0); }   // pattern shift
 
 function updateTimeUI() {
@@ -312,11 +373,12 @@ function newPhoton() {
 for (let i = 0; i < PHOTONS; i++) photons.push(newPhoton());
 
 function project(p, m) {
-  // camera-space point = Mᵀ·p (u_rot maps screen rays → world, so its
-  // transpose maps world → camera). Round-trip verified against the shader.
+  // Camera sits at -CAM_DIST·forward looking at the center, so camera-space
+  // coords are Mᵀ·p with depth offset by CAM_DIST. Round-trip verified
+  // against the shader ray construction.
   const x = m[0] * p[0] + m[1] * p[1] + m[2] * p[2];
   const y = m[3] * p[0] + m[4] * p[1] + m[5] * p[2];
-  const z = m[6] * p[0] + m[7] * p[1] + m[8] * p[2];
+  const z = m[6] * p[0] + m[7] * p[1] + m[8] * p[2] + CAM_DIST;
   if (z < 0.25) return null;
   const scale = (H / 2) * FOV;
   return [W / 2 + (x / z) * scale, H / 2 - (y / z) * scale];
@@ -325,6 +387,9 @@ function project(p, m) {
 function drawPhotons(m, rShell) {
   fx.clearRect(0, 0, W, H);
   fx.lineCap = "round";
+  // the observer ("you") at the shell's center — the photons converge here
+  fx.fillStyle = "rgba(255,255,255,0.45)";
+  fx.beginPath(); fx.arc(W / 2, H / 2, 1.6, 0, 7); fx.fill();
   for (const p of photons) {
     p.s += p.v;
     if (p.s >= 1) { Object.assign(p, newPhoton(), { s: 0 }); }
@@ -363,12 +428,14 @@ function frame(now) {
     updateTimeUI();
   }
   const m = rotMatrix(yaw, pitch);
+  const rShell = shellRadius(tNow);
   gl.uniformMatrix3fv(locRot, false, m);
   gl.uniform1f(locAspect, W / H);
   gl.uniform1f(locFov, FOV);
   gl.uniform1f(locDrift, shellDrift(tNow));
+  gl.uniform1f(locShellR, rShell);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  drawPhotons(m, shellRadius(tNow));
+  drawPhotons(m, rShell);
   requestAnimationFrame(frame);
 }
 updateTimeUI();
