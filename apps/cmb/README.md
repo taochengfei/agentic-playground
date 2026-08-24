@@ -25,7 +25,7 @@ the shell grows, more of them come into view.
 
 - Rendering: WebGL1 ray–sphere intersection with a quarter wedge removed and
   an absorbing interior (camera orbits outside the shell, always looking at
-  the center) + 2D canvas overlay for galaxies, photons, and the Earth marker
+  the center) + 2D canvas overlay for galaxies, photons, and a rendered Earth
   at the convergence point. Zero dependencies, no build step.
 - The CMB pattern is **synthesized**: random spherical modes with a frequency
   distribution shaped like the acoustic peaks — CMB-like, not the real Planck map.

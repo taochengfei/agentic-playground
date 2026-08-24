@@ -416,29 +416,68 @@ function project(p, m) {
   return [W / 2 + (x / z) * scale, H / 2 - (y / z) * scale];
 }
 
-// Earth — the observer, the center of the observable universe — drawn at
-// the convergence point: the shell's center, where every photon in the pool
-// arrives. The camera always looks at the center, so it projects to the
-// middle of the screen. Sized with the shell so the glow never swallows a
-// small (early-time) shell.
+// Earth — the observer, the center of the observable universe — pre-rendered
+// as a small planet sprite (oceans, land, ice, clouds, atmosphere; the
+// galaxy-smudge idiom). Drawn at the convergence point (shell center, always
+// screen-center) after the photons, so streaks terminate behind the planet;
+// scaled with the shell.
+function makeEarthSprite() {
+  const S = 96, cx = 48, cy = 48, R = 34;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const x = c.getContext("2d");
+  // atmosphere: soft halo around the limb
+  let g = x.createRadialGradient(cx, cy, R * 0.85, cx, cy, S / 2);
+  g.addColorStop(0.0, "rgba(130, 180, 255, 0.50)");
+  g.addColorStop(0.5, "rgba(120, 170, 255, 0.15)");
+  g.addColorStop(1.0, "rgba(120, 170, 255, 0)");
+  x.fillStyle = g;
+  x.beginPath(); x.arc(cx, cy, S / 2, 0, 7); x.fill();
+  // oceans, lit from the upper left
+  g = x.createRadialGradient(cx - R * 0.5, cy - R * 0.5, R * 0.1, cx, cy, R * 1.2);
+  g.addColorStop(0.0, "rgba(168, 216, 255, 1)");
+  g.addColorStop(0.45, "rgba(47, 127, 214, 1)");
+  g.addColorStop(1.0, "rgba(13, 47, 106, 1)");
+  x.fillStyle = g;
+  x.beginPath(); x.arc(cx, cy, R, 0, 7); x.fill();
+  x.save();
+  x.beginPath(); x.arc(cx, cy, R, 0, 7); x.clip();
+  // landmasses
+  x.fillStyle = "rgba(74, 148, 84, 0.95)";
+  for (const [dx, dy, rx, ry, rot] of [[-11, -9, 12, 7, -0.5], [-3, -3, 9, 5, 0.4], [14, 7, 9, 6, 0.9], [4, 17, 10, 5, -0.3], [-18, 12, 7, 4, 0.6]]) {
+    x.beginPath(); x.ellipse(cx + dx, cy + dy, rx, ry, rot, 0, 7); x.fill();
+  }
+  // polar ice
+  x.fillStyle = "rgba(245, 250, 255, 0.85)";
+  x.beginPath(); x.ellipse(cx, cy - R + 3.5, R * 0.6, 4.5, 0, 0, 7); x.fill();
+  x.beginPath(); x.ellipse(cx - 4, cy + R - 3.5, R * 0.4, 3.5, 0.2, 0, 7); x.fill();
+  // clouds
+  x.fillStyle = "rgba(255, 255, 255, 0.35)";
+  for (const [dx, dy, rx, rot] of [[-8, -16, 13, -0.2], [10, -4, 15, 0.3], [-6, 8, 11, -0.4], [16, 14, 8, 0.5]]) {
+    x.beginPath(); x.ellipse(cx + dx, cy + dy, rx, 2, rot, 0, 7); x.fill();
+  }
+  // spherical shading: darken the limb and the far (lower-right) side
+  g = x.createRadialGradient(cx - R * 0.45, cy - R * 0.45, R * 0.3, cx, cy, R * 1.05);
+  g.addColorStop(0.0, "rgba(0, 0, 0, 0)");
+  g.addColorStop(0.75, "rgba(5, 15, 40, 0.12)");
+  g.addColorStop(1.0, "rgba(5, 15, 40, 0.55)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, S, S);
+  x.restore();
+  // thin atmospheric limb
+  x.strokeStyle = "rgba(170, 215, 255, 0.55)";
+  x.lineWidth = 1.2;
+  x.beginPath(); x.arc(cx, cy, R + 0.6, 0, 7); x.stroke();
+  return c;
+}
+const earthSprite = makeEarthSprite();
+
 function drawEarth(rShell) {
   const cx = W / 2, cy = H / 2;
   const frac = rShell / 23; // 0.043 (min shell) → 1 (max shell)
-  const glowR = 7 + 9 * frac, bodyR = 2.6 + 2 * frac;
-  // atmospheric glow
-  let g = fx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-  g.addColorStop(0.0, "rgba(150, 200, 255, 0.50)");
-  g.addColorStop(0.45, "rgba(120, 175, 255, 0.16)");
-  g.addColorStop(1.0, "rgba(120, 175, 255, 0)");
-  fx.fillStyle = g;
-  fx.beginPath(); fx.arc(cx, cy, glowR, 0, 7); fx.fill();
-  // the planet: a small blue marble, lit toward the viewer
-  g = fx.createRadialGradient(cx - bodyR * 0.3, cy - bodyR * 0.3, bodyR * 0.1, cx, cy, bodyR);
-  g.addColorStop(0.0, "rgba(225, 240, 255, 0.98)");
-  g.addColorStop(0.45, "rgba(96, 158, 235, 0.95)");
-  g.addColorStop(1.0, "rgba(34, 74, 158, 0.92)");
-  fx.fillStyle = g;
-  fx.beginPath(); fx.arc(cx, cy, bodyR, 0, 7); fx.fill();
+  const R = 9 + 6 * frac;            // on-screen planet radius (px)
+  const draw = R * (96 / 34);        // sprite scale: the planet is 34/96 of it
+  fx.drawImage(earthSprite, cx - draw / 2, cy - draw / 2, draw, draw);
   // label — dark shadow (same trick as the HUD text): the sky has bright
   // white/cream regions, so bare text washes out. Shadow state persists, so
   // reset it fully after the call.
@@ -447,7 +486,7 @@ function drawEarth(rShell) {
   fx.shadowColor = "rgba(0, 0, 0, 0.9)";
   fx.shadowBlur = 3;
   fx.shadowOffsetY = 1;
-  fx.fillText("Earth — the observer", cx + 12, cy - 10);
+  fx.fillText("Earth — the observer", cx + R * 1.6, cy - R * 1.2);
   fx.shadowColor = "transparent";
   fx.shadowBlur = 0;
   fx.shadowOffsetY = 0;
@@ -473,10 +512,6 @@ function drawPhotons(m, rShell) {
     fx.moveTo(a[0], a[1]);
     fx.lineTo(a[0] + (dx / n) * len, a[1] + (dy / n) * len);
     fx.stroke();
-    if (closeness < 0.06) { // arrival flash at Earth
-      fx.fillStyle = `rgba(255, 245, 220, ${0.35 * (1 - closeness / 0.06)})`;
-      fx.beginPath(); fx.arc(W / 2, H / 2, 3 + 10 * (1 - closeness / 0.06), 0, 7); fx.fill();
-    }
   }
 }
 
@@ -559,8 +594,8 @@ function frame(now) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   fx.clearRect(0, 0, W, H);
   drawGalaxies(m, rShell);
-  drawEarth(rShell);
   drawPhotons(m, rShell);
+  drawEarth(rShell); // after photons: streaks terminate behind the planet
   requestAnimationFrame(frame);
 }
 updateTimeUI();
