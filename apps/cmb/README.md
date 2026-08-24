@@ -13,12 +13,18 @@ just before it turned transparent.
 
 The space around the shell is not empty: it is pre-recombination plasma, not
 yet transparent to us, so it is rendered as the same CMB-like field, dimmed and
-desaturated. Inside the shell, faint galaxy smudges sit at fixed comoving
-positions — as the shell grows, more of them come into view.
+desaturated. A quarter (90°) of the shell is cut away so the interior can be
+seen directly: it is filled with translucent black space, and the far side of
+the CMB shell still glows through it. The flat faces of the cut show the CMB
+pattern of the removed quarter.
 
-- Rendering: WebGL1 ray–sphere intersection (camera orbits outside the shell,
-  always looking at the center) + 2D canvas overlay for galaxies and photons.
-  Zero dependencies, no build step.
+Inside the shell, faint galaxy smudges sit at fixed comoving positions — as
+the shell grows, more of them come into view.
+
+- Rendering: WebGL1 ray–sphere intersection with a quarter wedge removed and
+  an absorbing interior (camera orbits outside the shell, always looking at
+  the center) + 2D canvas overlay for galaxies and photons. Zero dependencies,
+  no build step.
 - The CMB pattern is **synthesized**: random spherical modes with a frequency
   distribution shaped like the acoustic peaks — CMB-like, not the real Planck map.
 - The shell distance/time relation (`shellGly`) is a schematic power law, not a

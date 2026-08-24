@@ -5,15 +5,17 @@
 
   You float outside the observable universe. The glowing sphere is the surface
   of last scattering — the spherical shell where the universe first became
-  transparent 380,000 years after the Big Bang. The point at its center is US:
-  the observer. Light released on the shell converges on that point and is
-  arriving right now. The space around the shell is not empty: it is
-  pre-recombination plasma, not yet transparent to us, so it glows like the
-  shell itself (dimmed and desaturated). Inside the shell, galaxies of our
-  observable universe sit at fixed comoving positions — as "now" advances and
-  the shell grows, more of them come into view. The pattern on the shell
-  shifts as it recedes — revealing what that farther region looked like just
-  before it turned transparent.
+  transparent 380,000 years after the Big Bang. A quarter (90°) of the shell is
+  cut away so you can look straight in: the interior is filled with
+  translucent black space, and the far side of the CMB shell still glows
+  through it. The point at the shell's center is US: the observer. Light
+  released on the shell converges on that point and is arriving right now. The
+  space around the shell is not empty: it is pre-recombination plasma, not yet
+  transparent to us, so it glows like the shell itself (dimmed and
+  desaturated). Inside, galaxies of our observable universe sit at fixed
+  comoving positions — as "now" advances and the shell grows, more of them
+  come into view. The pattern on the shell shifts as it recedes — revealing
+  what that farther region looked like just before it turned transparent.
 
   Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
   Controls:
@@ -72,14 +74,15 @@
   <div class="row">travel time <b id="hudTravel">13.80 Gyr</b> — arriving now</div>
   <div class="note">
     God's-eye view from beyond the horizon. The glowing sphere is the boundary
-    of our observable universe; the space around it is pre-recombination
-    plasma — not yet transparent to us, so it glows like the shell itself.
-    The faint smudges inside are galaxies at their comoving positions: as
-    "now" advances and the shell grows, more of them come into view. The point
-    at the shell's center is us — light released on it 380,000 years after the
-    Big Bang converges there, arriving now. The pattern is a synthesized CMB-
-    like field (Gaussian modes shaped like the acoustic peaks), not the real
-    Planck map.
+    of our observable universe — a quarter of it is cut away to expose the
+    interior, where translucent black space holds galaxies at their comoving
+    positions; as "now" advances and the shell grows, more come into view, and
+    the far side of the CMB shell still glows through the dark. The space
+    around the shell is pre-recombination plasma — not yet transparent, so it
+    glows like the shell itself. The point at the center is us: light released
+    on this shell 380,000 years after the Big Bang converges there, arriving
+    now. The pattern is a synthesized CMB-like field (Gaussian modes shaped
+    like the acoustic peaks), not the real Planck map.
   </div>
 </div>
 
@@ -183,6 +186,9 @@ function synthesizeCMB() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2) WebGL: render the shell as a CMB-textured sphere seen from OUTSIDE —
 //    a god's-eye camera orbiting beyond it, always looking at the center.
+//    A quarter wedge of the shell is cut away (world-space {x>0, z<0}); the
+//    interior is a translucent black absorbing volume, so the far-side shell
+//    shows through it dimmed.
 // ─────────────────────────────────────────────────────────────────────────────
 const glc = document.getElementById("c");
 const gl = glc.getContext("webgl", { antialias: true });
@@ -211,6 +217,23 @@ uniform float u_drift;   // radians of pattern shift as the shell recedes
 uniform float u_camDist; // god's-eye camera distance from the shell center
 uniform float u_shellR;  // current shell radius (scene units)
 
+// A quarter (90°) of the shell is cut away — the fixed world-space region
+// {x > 0, z < 0} — so the interior is visible directly. The mask is
+// anti-aliased across fw world units.
+float wedgeMask(vec3 p, float fw) {
+  return smoothstep(-fw, fw, p.x) * smoothstep(-fw, fw, -p.z);
+}
+
+// CMB pattern at a sphere point, with the membrane rim glow
+vec3 cmbAt(vec3 pt, vec3 rd) {
+  vec3 n = normalize(pt);
+  float theta = acos(clamp(n.y, -1.0, 1.0));
+  float phi = atan(n.z, n.x) + u_drift;
+  vec3 sky = texture2D(u_tex, vec2(phi / 6.28318530718 + 0.5, theta / 3.14159265359)).rgb;
+  float rim = pow(1.0 - max(dot(-rd, n), 0.0), 3.0);
+  return sky + vec3(0.45, 0.65, 1.0) * rim * 0.4;
+}
+
 void main() {
   vec2 p = (v_uv - 0.5) * 2.0;
   p.x *= u_aspect;
@@ -226,7 +249,7 @@ void main() {
   float bgLum = dot(bgTex, vec3(0.299, 0.587, 0.114));
   vec3 col = mix(vec3(bgLum), bgTex, 0.5) * 0.5;
 
-  // ── intersect the shell (sphere of radius u_shellR at the origin) ──
+  // ── shell: ray vs sphere, with a quarter wedge cut away ──
   float b = dot(ro, rd);
   float c = dot(ro, ro) - u_shellR * u_shellR;
   float disc = b * b - c;
@@ -238,17 +261,42 @@ void main() {
   float cover = (t1 > 0.0) ? smoothstep(-aa, aa, disc) : 0.0;
 
   if (cover > 0.0) {
-    vec3 hp = ro + t1 * rd;
-    vec3 n = hp / u_shellR;
-    float theta = acos(clamp(n.y, -1.0, 1.0));
-    float phi = atan(n.z, n.x) + u_drift;
-    vec2 uv = vec2(phi / 6.28318530718 + 0.5, theta / 3.14159265359);
-    vec3 sky = texture2D(u_tex, uv).rgb;
-    // rim glow: from outside, the shell reads as a luminous membrane
-    float rim = pow(1.0 - max(dot(-rd, n), 0.0), 3.0);
-    sky += vec3(0.45, 0.65, 1.0) * rim * 0.4;
-    // slightly translucent: the plasma beyond shows through the membrane
-    col = mix(col, sky, cover * 0.88);
+    float t2 = -b + sqrt(max(disc, 0.0));
+    vec3 pIn = ro + t1 * rd;
+    vec3 pOut = ro + t2 * rd;
+    float fw = 0.05;
+#ifdef GL_OES_standard_derivatives
+    fw = max(max(fwidth(pIn.x), fwidth(pIn.z)), 0.03);
+#endif
+    float wIn = wedgeMask(pIn, fw);
+
+    // the intact near-side shell
+    vec3 nearView = mix(col, cmbAt(pIn, rd), 0.88);
+
+    // the view through the cut: the far-side shell behind a translucent
+    // black interior (absorption over the chord), plus the flat cross-
+    // section disks of the cut, textured like the shell they came from
+    vec3 through = col;
+    float wOut = 1.0 - wedgeMask(pOut, fw);
+    if (wOut > 0.0) through = mix(through, cmbAt(pOut, rd), wOut * 0.88);
+    through *= exp(-0.022 * (t2 - t1));
+    float faceT = 1e9;
+    if (rd.x < 0.0) { // disk in the x = 0 plane (z < 0 half), facing +x
+      float td = -ro.x / rd.x;
+      vec3 h = ro + td * rd;
+      if (td > t1 && h.z < 0.0 && dot(h, h) < u_shellR * u_shellR) faceT = td;
+    }
+    if (rd.z > 0.0) { // disk in the z = 0 plane (x > 0 half), facing -z
+      float td = -ro.z / rd.z;
+      vec3 h = ro + td * rd;
+      if (td > t1 && h.x > 0.0 && dot(h, h) < u_shellR * u_shellR && td < faceT) faceT = td;
+    }
+    if (faceT < 1e8) {
+      vec3 h = ro + faceT * rd;
+      through = mix(through, cmbAt(h, rd) * 0.7 * exp(-0.022 * (faceT - t1)), 0.9);
+    }
+
+    col = mix(col, mix(through, nearView, 1.0 - wIn), cover);
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -300,7 +348,7 @@ gl.uniform1i(locTex, 0);
 //    at the center. u_rot maps screen rays to world directions; world → camera
 //    space for the photon overlay is Mᵀ·p shifted by the camera position.
 // ─────────────────────────────────────────────────────────────────────────────
-let yaw = 0.6, pitch = -0.15;
+let yaw = -0.9, pitch = -0.15; // start looking into the cut-away quarter
 const rotBuf = new Float32Array(9);
 function rotMatrix(yaw, pitch) {
   const cy = Math.cos(yaw), sy = Math.sin(yaw);
