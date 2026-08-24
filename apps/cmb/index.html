@@ -6,9 +6,9 @@
   You float outside the observable universe. The glowing sphere is the surface
   of last scattering — the spherical shell where the universe first became
   transparent 380,000 years after the Big Bang. A quarter (90°) of the shell is
-  cut away so you can look straight in: the interior is filled with
-  translucent black space, and the far side of the CMB shell still glows
-  through it. The point at the shell's center is US: the observer. Light
+  cut away so you can look straight in: the interior is near-black space with
+  galaxies in it, and only a faint ghost of the far side of the CMB shell
+  behind. The point at the shell's center is US: the observer. Light
   released on the shell converges on that point and is arriving right now. The
   space around the shell is not empty: it is pre-recombination plasma, not yet
   transparent to us, so it glows like the shell itself (dimmed and
@@ -75,9 +75,8 @@
   <div class="note">
     God's-eye view from beyond the horizon. The glowing sphere is the boundary
     of our observable universe — a quarter of it is cut away to expose the
-    interior, where translucent black space holds galaxies at their comoving
-    positions; as "now" advances and the shell grows, more come into view, and
-    the far side of the CMB shell still glows through the dark. The space
+    interior: near-black space with galaxies at their comoving positions. As
+    "now" advances and the shell grows, more come into view. The space
     around the shell is pre-recombination plasma — not yet transparent, so it
     glows like the shell itself. The point at the center is us: light released
     on this shell 380,000 years after the Big Bang converges there, arriving
@@ -273,13 +272,14 @@ void main() {
     // the intact near-side shell
     vec3 nearView = mix(col, cmbAt(pIn, rd), 0.88);
 
-    // the view through the cut: the far-side shell behind a translucent
-    // black interior (absorption over the chord), plus the flat cross-
-    // section disks of the cut, textured like the shell they came from
+    // the view through the cut: a near-black interior (dark space), with
+    // only a faint ghost of the far-side shell behind it (absorption over
+    // the chord), plus the flat cross-section disks of the cut, textured
+    // like the shell they came from
     vec3 through = col;
     float wOut = 1.0 - wedgeMask(pOut, fw);
     if (wOut > 0.0) through = mix(through, cmbAt(pOut, rd), wOut * 0.88);
-    through *= exp(-0.022 * (t2 - t1));
+    through *= exp(-0.045 * (t2 - t1));
     float faceT = 1e9;
     if (rd.x < 0.0) { // disk in the x = 0 plane (z < 0 half), facing +x
       float td = -ro.x / rd.x;
@@ -293,7 +293,7 @@ void main() {
     }
     if (faceT < 1e8) {
       vec3 h = ro + faceT * rd;
-      through = mix(through, cmbAt(h, rd) * 0.7 * exp(-0.022 * (faceT - t1)), 0.9);
+      through = mix(through, cmbAt(h, rd) * 0.7 * exp(-0.045 * (faceT - t1)), 0.9);
     }
 
     col = mix(col, mix(through, nearView, 1.0 - wIn), cover);
