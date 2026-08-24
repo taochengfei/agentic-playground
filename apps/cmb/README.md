@@ -15,8 +15,9 @@ The space around the shell is not empty: it is pre-recombination plasma, not
 yet transparent to us, so it is rendered as the same CMB-like field, dimmed and
 desaturated. A quarter (90°) of the shell is cut away so the interior can be
 seen directly: near-black space with galaxies in it, with only a faint ghost
-of the far side of the CMB shell behind it. The flat faces of the cut show
-the CMB pattern of the removed quarter.
+of the far side of the CMB shell behind it. The shell is a thin membrane, so
+the cut edge keeps a glowing rim of the CMB pattern and nothing extends
+toward the center.
 
 Inside the shell, faint galaxy smudges sit at fixed comoving positions — as
 the shell grows, more of them come into view.

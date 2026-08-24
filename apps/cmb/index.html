@@ -6,9 +6,10 @@
   You float outside the observable universe. The glowing sphere is the surface
   of last scattering — the spherical shell where the universe first became
   transparent 380,000 years after the Big Bang. A quarter (90°) of the shell is
-  cut away so you can look straight in: the interior is near-black space with
-  galaxies in it, and only a faint ghost of the far side of the CMB shell
-  behind. The point at the shell's center is US: the observer. Light
+  cut away so you can look straight in — the cut edge keeps a glowing rim of
+  the membrane, and the interior is near-black space with galaxies in it,
+  with only a faint ghost of the far side of the CMB shell behind. The point
+  at the shell's center is US: the observer. Light
   released on the shell converges on that point and is arriving right now. The
   space around the shell is not empty: it is pre-recombination plasma, not yet
   transparent to us, so it glows like the shell itself (dimmed and
@@ -185,9 +186,9 @@ function synthesizeCMB() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2) WebGL: render the shell as a CMB-textured sphere seen from OUTSIDE —
 //    a god's-eye camera orbiting beyond it, always looking at the center.
-//    A quarter wedge of the shell is cut away (world-space {x>0, z<0}); the
-//    interior is a translucent black absorbing volume, so the far-side shell
-//    shows through it dimmed.
+//    A quarter wedge of the shell is cut away (world-space {x>E, z<-E},
+//    leaving a rim strip along the cut edges); the interior is a dark
+//    absorbing volume, so the far-side shell shows through it faintly.
 // ─────────────────────────────────────────────────────────────────────────────
 const glc = document.getElementById("c");
 const gl = glc.getContext("webgl", { antialias: true });
@@ -217,10 +218,11 @@ uniform float u_camDist; // god's-eye camera distance from the shell center
 uniform float u_shellR;  // current shell radius (scene units)
 
 // A quarter (90°) of the shell is cut away — the fixed world-space region
-// {x > 0, z < 0} — so the interior is visible directly. The mask is
-// anti-aliased across fw world units.
-float wedgeMask(vec3 p, float fw) {
-  return smoothstep(-fw, fw, p.x) * smoothstep(-fw, fw, -p.z);
+// {x > E, z < -E} — leaving a rim strip of width E along the cut edges: the
+// shell is a thin membrane, so the cut edge keeps the CMB pattern while
+// nothing is painted toward the center. Anti-aliased across fw world units.
+float wedgeMask(vec3 p, float E, float fw) {
+  return smoothstep(-fw, fw, p.x - E) * smoothstep(-fw, fw, -(p.z + E));
 }
 
 // CMB pattern at a sphere point, with the membrane rim glow
@@ -263,38 +265,24 @@ void main() {
     float t2 = -b + sqrt(max(disc, 0.0));
     vec3 pIn = ro + t1 * rd;
     vec3 pOut = ro + t2 * rd;
+    float E = min(2.0, u_shellR * 0.3); // width of the cut-edge rim strip
     float fw = 0.05;
 #ifdef GL_OES_standard_derivatives
     fw = max(max(fwidth(pIn.x), fwidth(pIn.z)), 0.03);
 #endif
-    float wIn = wedgeMask(pIn, fw);
+    float wIn = wedgeMask(pIn, E, fw);
 
-    // the intact near-side shell
+    // the near-side shell (including the rim strip along the cut edges)
     vec3 nearView = mix(col, cmbAt(pIn, rd), 0.88);
 
-    // the view through the cut: a near-black interior (dark space), with
-    // only a faint ghost of the far-side shell behind it (absorption over
-    // the chord), plus the flat cross-section disks of the cut, textured
-    // like the shell they came from
+    // the view through the opening: a near-black interior (dark space),
+    // with only a faint ghost of the far-side shell behind it (absorption
+    // over the chord) — the pattern stays on the shell, nothing extends
+    // toward the center
     vec3 through = col;
-    float wOut = 1.0 - wedgeMask(pOut, fw);
+    float wOut = 1.0 - wedgeMask(pOut, E, fw);
     if (wOut > 0.0) through = mix(through, cmbAt(pOut, rd), wOut * 0.88);
     through *= exp(-0.045 * (t2 - t1));
-    float faceT = 1e9;
-    if (rd.x < 0.0) { // disk in the x = 0 plane (z < 0 half), facing +x
-      float td = -ro.x / rd.x;
-      vec3 h = ro + td * rd;
-      if (td > t1 && h.z < 0.0 && dot(h, h) < u_shellR * u_shellR) faceT = td;
-    }
-    if (rd.z > 0.0) { // disk in the z = 0 plane (x > 0 half), facing -z
-      float td = -ro.z / rd.z;
-      vec3 h = ro + td * rd;
-      if (td > t1 && h.x > 0.0 && dot(h, h) < u_shellR * u_shellR && td < faceT) faceT = td;
-    }
-    if (faceT < 1e8) {
-      vec3 h = ro + faceT * rd;
-      through = mix(through, cmbAt(h, rd) * 0.7 * exp(-0.045 * (faceT - t1)), 0.9);
-    }
 
     col = mix(col, mix(through, nearView, 1.0 - wIn), cover);
   }
