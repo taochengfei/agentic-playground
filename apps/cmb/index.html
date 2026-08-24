@@ -8,15 +8,16 @@
   transparent 380,000 years after the Big Bang. A quarter (90°) of the shell is
   cut away so you can look straight in — the cut edge keeps a glowing rim of
   the membrane, and the interior is near-black space with galaxies in it,
-  with only a faint ghost of the far side of the CMB shell behind. The point
-  at the shell's center is US: the observer. Light
-  released on the shell converges on that point and is arriving right now. The
-  space around the shell is not empty: it is pre-recombination plasma, not yet
-  transparent to us, so it glows like the shell itself (dimmed and
-  desaturated). Inside, galaxies of our observable universe sit at fixed
-  comoving positions — as "now" advances and the shell grows, more of them
-  come into view. The pattern on the shell shifts as it recedes — revealing
-  what that farther region looked like just before it turned transparent.
+  with only a faint ghost of the far side of the CMB shell behind. At the
+  shell's center sits Earth — us, the observer, the center of our observable
+  universe: light released on the shell converges on that point and is
+  arriving right now. The space around the shell is not empty: it is
+  pre-recombination plasma, not yet transparent to us, so it glows like the
+  shell itself (dimmed and desaturated). Inside, galaxies of our observable
+  universe sit at fixed comoving positions — as "now" advances and the shell
+  grows, more of them come into view. The pattern on the shell shifts as it
+  recedes — revealing what that farther region looked like just before it
+  turned transparent.
 
   Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
   Controls:
@@ -79,10 +80,10 @@
     interior: near-black space with galaxies at their comoving positions. As
     "now" advances and the shell grows, more come into view. The space
     around the shell is pre-recombination plasma — not yet transparent, so it
-    glows like the shell itself. The point at the center is us: light released
-    on this shell 380,000 years after the Big Bang converges there, arriving
-    now. The pattern is a synthesized CMB-like field (Gaussian modes shaped
-    like the acoustic peaks), not the real Planck map.
+    glows like the shell itself. At the center sits Earth — us, the observer:
+    light released on this shell 380,000 years after the Big Bang converges
+    there, arriving now. The pattern is a synthesized CMB-like field
+    (Gaussian modes shaped like the acoustic peaks), not the real Planck map.
   </div>
 </div>
 
@@ -391,8 +392,9 @@ function updateTimeUI() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5) Photons: light released on the shell, arriving at you right now.
-//    Streaks run from the shell (current radius) toward the camera at center.
+// 5) Photons: light released on the shell, arriving at Earth right now.
+//    Streaks run from the shell (current radius) toward the center, where
+//    Earth sits.
 // ─────────────────────────────────────────────────────────────────────────────
 const PHOTONS = 220;
 const photons = [];
@@ -414,11 +416,45 @@ function project(p, m) {
   return [W / 2 + (x / z) * scale, H / 2 - (y / z) * scale];
 }
 
+// Earth — the observer, the center of the observable universe — drawn at
+// the convergence point: the shell's center, where every photon in the pool
+// arrives. The camera always looks at the center, so it projects to the
+// middle of the screen. Sized with the shell so the glow never swallows a
+// small (early-time) shell.
+function drawEarth(rShell) {
+  const cx = W / 2, cy = H / 2;
+  const frac = rShell / 23; // 0.043 (min shell) → 1 (max shell)
+  const glowR = 7 + 9 * frac, bodyR = 2.6 + 2 * frac;
+  // atmospheric glow
+  let g = fx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+  g.addColorStop(0.0, "rgba(150, 200, 255, 0.50)");
+  g.addColorStop(0.45, "rgba(120, 175, 255, 0.16)");
+  g.addColorStop(1.0, "rgba(120, 175, 255, 0)");
+  fx.fillStyle = g;
+  fx.beginPath(); fx.arc(cx, cy, glowR, 0, 7); fx.fill();
+  // the planet: a small blue marble, lit toward the viewer
+  g = fx.createRadialGradient(cx - bodyR * 0.3, cy - bodyR * 0.3, bodyR * 0.1, cx, cy, bodyR);
+  g.addColorStop(0.0, "rgba(225, 240, 255, 0.98)");
+  g.addColorStop(0.45, "rgba(96, 158, 235, 0.95)");
+  g.addColorStop(1.0, "rgba(34, 74, 158, 0.92)");
+  fx.fillStyle = g;
+  fx.beginPath(); fx.arc(cx, cy, bodyR, 0, 7); fx.fill();
+  // label — dark shadow (same trick as the HUD text): the sky has bright
+  // white/cream regions, so bare text washes out. Shadow state persists, so
+  // reset it fully after the call.
+  fx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+  fx.fillStyle = "rgba(225, 238, 255, 0.9)";
+  fx.shadowColor = "rgba(0, 0, 0, 0.9)";
+  fx.shadowBlur = 3;
+  fx.shadowOffsetY = 1;
+  fx.fillText("Earth — the observer", cx + 12, cy - 10);
+  fx.shadowColor = "transparent";
+  fx.shadowBlur = 0;
+  fx.shadowOffsetY = 0;
+}
+
 function drawPhotons(m, rShell) {
   fx.lineCap = "round";
-  // the observer ("you") at the shell's center — the photons converge here
-  fx.fillStyle = "rgba(255,255,255,0.45)";
-  fx.beginPath(); fx.arc(W / 2, H / 2, 1.6, 0, 7); fx.fill();
   for (const p of photons) {
     p.s += p.v;
     if (p.s >= 1) { Object.assign(p, newPhoton(), { s: 0 }); }
@@ -426,7 +462,7 @@ function drawPhotons(m, rShell) {
     const pos = [p.d[0] * r, p.d[1] * r, p.d[2] * r];
     const a = project(pos, m);
     if (!a) continue;
-    const closeness = 1 - p.s;              // 1 on the shell → 0 at you
+    const closeness = 1 - p.s;              // 1 on the shell → 0 at Earth
     const len = 6 + 26 * (1 - closeness);   // longer streaks near arrival
     const alpha = 0.10 + 0.5 * (1 - closeness);
     const dx = (W / 2 - a[0]), dy = (H / 2 - a[1]);
@@ -437,7 +473,7 @@ function drawPhotons(m, rShell) {
     fx.moveTo(a[0], a[1]);
     fx.lineTo(a[0] + (dx / n) * len, a[1] + (dy / n) * len);
     fx.stroke();
-    if (closeness < 0.06) { // arrival flash at your eye
+    if (closeness < 0.06) { // arrival flash at Earth
       fx.fillStyle = `rgba(255, 245, 220, ${0.35 * (1 - closeness / 0.06)})`;
       fx.beginPath(); fx.arc(W / 2, H / 2, 3 + 10 * (1 - closeness / 0.06), 0, 7); fx.fill();
     }
@@ -523,6 +559,7 @@ function frame(now) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   fx.clearRect(0, 0, W, H);
   drawGalaxies(m, rShell);
+  drawEarth(rShell);
   drawPhotons(m, rShell);
   requestAnimationFrame(frame);
 }

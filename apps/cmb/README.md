@@ -3,8 +3,9 @@
 The CMB as the boundary of the observable universe, seen from **outside** — a
 god's-eye view. The glowing sphere is the **surface of last scattering**: the
 spherical shell where the universe first became transparent, 380,000 years after
-the Big Bang. The point at its center is the observer (us); light released on
-the shell converges on that point and is arriving right now.
+the Big Bang. At its center sits **Earth** — us, the observer, the center of
+the observable universe; light released on the shell converges there and is
+arriving right now.
 
 As "now" (observer cosmic time) advances, the shell grows toward the vantage
 point and the pattern on it shifts: the light only now reaching us comes from a
@@ -24,8 +25,8 @@ the shell grows, more of them come into view.
 
 - Rendering: WebGL1 ray–sphere intersection with a quarter wedge removed and
   an absorbing interior (camera orbits outside the shell, always looking at
-  the center) + 2D canvas overlay for galaxies and photons. Zero dependencies,
-  no build step.
+  the center) + 2D canvas overlay for galaxies, photons, and the Earth marker
+  at the convergence point. Zero dependencies, no build step.
 - The CMB pattern is **synthesized**: random spherical modes with a frequency
   distribution shaped like the acoustic peaks — CMB-like, not the real Planck map.
 - The shell distance/time relation (`shellGly`) is a schematic power law, not a
