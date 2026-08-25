@@ -318,7 +318,8 @@ const locDrift = gl.getUniformLocation(prog, "u_drift");
 const locCamDist = gl.getUniformLocation(prog, "u_camDist");
 const locShellR = gl.getUniformLocation(prog, "u_shellR");
 const FOV = 0.9;  // tan of half vertical fov (~77°)
-const CAM_DIST = 42; // god's-eye camera distance (always > max shell radius 23)
+const CAM_DIST = 30; // god's-eye camera distance (must stay > max shell radius 23);
+                     // close enough that the shell fills the field of view
 gl.uniform1f(locCamDist, CAM_DIST);
 
 const tex = gl.createTexture();
