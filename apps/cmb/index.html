@@ -20,10 +20,22 @@
   turned transparent.
 
   Zero dependencies (WebGL1 + 2D canvas overlay), no build step.
+
+  Below the shell view, two more stacked scenes (scroll down): II "the
+  plasma" — a particle encoding of pre-recombination physics: acoustic
+  oscillations rippling through a photon-baryon gas, and photon paths that
+  random-walk (scatter) through the opaque fog instead of crossing it.
+  III "the timeline" — a scrubbing, looping march through the eras: 1 second
+  (an opaque fire) → 380,000 years (the fog thins; light is released at
+  recombination) → today (transparent space, galaxies, and the released CMB
+  light arriving at us now). The three scenes stack as full-height sections.
   Controls:
-    drag          — orbit the view around the shell
-    slider        — advance "now" (observer cosmic time, 0.0 → 13.8 Gyr)
-    space         — play / pause the receding shell
+    drag          — orbit the view around the shell (scene I; vertical touch
+                    drags still scroll the page)
+    scroll        — move between the three scenes
+    slider        — advance "now" (scene I) / scrub cosmic time (scene III)
+    space         — play / pause the visible scene
+    click (II)    — stir a ripple in the fog
   The pattern is a synthesized CMB-like field (Gaussian modes with an
   acoustic-peak-shaped spectrum), not the real Planck map.
 -->
@@ -33,12 +45,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>cmb — the receding shell</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #05070c; overflow: hidden; }
-  canvas { position: fixed; inset: 0; display: block; touch-action: none; }
-  #fx { pointer-events: none; }
+  html { height: 100%; scroll-snap-type: y proximity; background: #05070c; }
+  body { margin: 0; min-height: 100%; overflow-y: scroll; }
+  /* Three stacked full-height scenes; scroll to move between them. */
+  .scene { position: relative; height: 100vh; overflow: hidden; scroll-snap-align: start; }
+  /* pan-y (not none): vertical touch-drag scrolls between scenes, horizontal drag still orbits. */
+  .scene canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: pan-y; }
+  #fx, .chip, .shint { pointer-events: none; }
   /* Dark scrim panels: the sky has large bright (white/cream) regions, so
      text needs a backing to stay legible everywhere, not just on dark areas. */
-  #hud, #controls {
+  #hud, #controls, .chip, .tlcontrols {
     background: rgba(5, 8, 14, .58);
     border: 1px solid rgba(255,255,255,.10);
     border-radius: 10px;
@@ -47,7 +63,7 @@
     -webkit-backdrop-filter: blur(6px);
   }
   #hud {
-    position: fixed; left: 14px; top: 12px; max-width: 430px;
+    position: absolute; left: 14px; top: 12px; max-width: 430px;
     font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
     color: rgba(240,244,255,.96); user-select: none; pointer-events: none;
     text-shadow: 0 1px 2px rgba(0,0,0,.9);
@@ -56,15 +72,31 @@
   #hud .row b { color: #ffd27a; font-weight: 600; }
   #hud .note { margin-top: 8px; color: rgba(214,224,244,.80); }
   #controls {
-    position: fixed; left: 14px; bottom: 14px; width: min(430px, calc(100vw - 28px));
+    position: absolute; left: 14px; bottom: 14px; width: min(430px, calc(100vw - 28px));
     font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     color: rgba(240,244,255,.94);
   }
-  #controls input[type=range] { width: 100%; accent-color: #ffd27a; }
-  #controls .hint { color: rgba(205,216,238,.75); margin-top: 4px; }
+  .tlcontrols { position: absolute; left: 14px; bottom: 14px; width: min(430px, calc(100vw - 28px));
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(240,244,255,.94);
+  }
+  #controls input[type=range], .tlcontrols input[type=range] { width: 100%; accent-color: #ffd27a; }
+  #controls .hint, .tlcontrols .hint { color: rgba(205,216,238,.75); margin-top: 4px; }
+  /* Scene captions (II and III): same scrim-panel idiom as the HUD. */
+  .chip { position: absolute; left: 14px; top: 12px; max-width: min(440px, 52vw);
+    font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(240,244,255,.93); text-shadow: 0 1px 2px rgba(0,0,0,.9); user-select: none;
+  }
+  .chip b { color: #ffd27a; }
+  #tlEra { margin-top: 8px; color: #ffd27a; }
+  .shint { position: absolute; right: 14px; bottom: 14px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(205,216,238,.65); user-select: none;
+  }
 </style>
 </head>
 <body>
+<div class="scene" id="scene1" data-scene="1">
 <canvas id="c"></canvas>
 <canvas id="fx"></canvas>
 
@@ -90,7 +122,41 @@
 <div id="controls">
   <label for="time">now: <span id="timeLabel">13.80 Gyr</span> after the Big Bang</label>
   <input id="time" type="range" min="0" max="13.8" step="0.005" value="13.8">
-  <div class="hint">drag: orbit the shell · space: play/pause</div>
+  <div class="hint">drag: orbit the shell · space: play/pause · scroll ↓ for two more scenes</div>
+</div>
+<div class="shint">scroll ↓ — the plasma</div>
+</div>
+
+<div class="scene" id="scene2" data-scene="2">
+<canvas id="p2"></canvas>
+<div class="chip">
+  <b>II · The plasma — light is trapped.</b> Before 380,000 years the universe
+  is an opaque fog: free electrons scatter every photon every few centimeters,
+  so light can't cross it in a straight line — it random-walks outward, like
+  light through fog. The bright curls are photon paths (last 40 scattering
+  events); the faint expanding rings are sound — acoustic oscillations racing
+  through the photon–baryon gas. Gravity pulls matter in, radiation pressure
+  pushes out; frozen into the CMB, those waves are the hot and cold spots.
+  Click the fog to stir a ripple.
+</div>
+<div class="shint">scroll ↓ — the timeline</div>
+</div>
+
+<div class="scene" id="scene3" data-scene="3">
+<canvas id="tlc"></canvas>
+<div class="chip">
+  <b>III · The whole history in 30 seconds.</b> Each era gets its own visual
+  regime: a searing, opaque <i>fire</i> → a cooling <i>fog</i> that thins into
+  transparency at recombination → <i>transparent space</i>, where galaxies
+  appear and the released CMB light streams inward, arriving at us now.
+  <div id="tlEra">the fire — no atoms yet</div>
+  <div><span id="tlClock">t = 1.0 second</span> — since the Big Bang (log scale)</div>
+</div>
+<div class="tlcontrols">
+  <label for="tlRange">cosmic time: <span id="tlRead">1.0 second</span></label>
+  <input id="tlRange" type="range" min="0" max="1000" step="1" value="0">
+  <div class="hint">drag: scrub time (it loops) · space: play/pause</div>
+</div>
 </div>
 
 <script>
@@ -196,6 +262,11 @@ const gl = glc.getContext("webgl", { antialias: true });
 gl.getExtension("OES_standard_derivatives"); // optional: antialiased silhouette
 const fxc = document.getElementById("fx");
 const fx = fxc.getContext("2d");
+// Scene II/III canvases (each lives inside its own full-height .scene below)
+const p2c = document.getElementById("p2");
+const p2 = p2c.getContext("2d");
+const tlC = document.getElementById("tlc");
+const tl = tlC.getContext("2d");
 
 const VERT = `
 attribute vec2 a_pos;
@@ -353,12 +424,12 @@ let W = 0, H = 0;
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth; H = window.innerHeight;
-  for (const c of [glc, fxc]) {
+  for (const c of [glc, fxc, p2c, tlC]) { // all four canvases are viewport-sized
     c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
     c.style.width = W + "px"; c.style.height = H + "px";
   }
   gl.viewport(0, 0, glc.width, glc.height);
-  fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const x of [fx, p2, tl]) x.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -574,44 +645,421 @@ function drawGalaxies(m, rShell) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7) Main loop
+// 7) Scene II — "the plasma": particle encoding of pre-recombination physics.
+//    A slab of photon-baryon fog, top-down. Sound rings (acoustic
+//    oscillations) expand from overdense seeds and ripple through the gas —
+//    compression bright, rarefaction dark. Photon paths random-walk: straight
+//    legs between scatterings, direction re-rolled at every scattering event
+//    (45% pure random, 55% biased by a slow flow field) — light cannot cross
+//    the opaque fog in a straight line. Click to stir your own ripple.
 // ─────────────────────────────────────────────────────────────────────────────
+const rng2 = mulberry32(0xF1A5);
+function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+// slow decorrelated sinusoids used as a drift field (purely cosmetic curl)
+function flowX(x, y, t) { return Math.sin(y * 0.011 + t * 0.33) + Math.cos(x * 0.013 - y * 0.007 + t * 0.27) * 0.8; }
+function flowY(x, y, t) { return Math.cos(x * 0.010 - t * 0.31) + Math.sin(y * 0.012 + x * 0.006 - t * 0.23) * 0.8; }
+
+// Acoustic ring sources: five overdense seeds emit a compression ring every
+// RING_PERIOD seconds; click ripples join the same list. Age → radius.
+const RING_PERIOD = 2.2, RING_C = 52, RING_MAX = 330, RING_BAND = 13;
+const PL_SEEDS = [[0.20, 0.34, 0.4], [0.78, 0.26, 2.0], [0.64, 0.70, 1.2], [0.30, 0.74, 2.6], [0.52, 0.50, 0.9]];
+function emitRings(t, clicks) {
+  const out = [];
+  for (const [sx, sy, ph] of PL_SEEDS) {
+    for (let k = 0; k < 4; k++) {
+      const age = t - ph - k * RING_PERIOD;
+      if (age > 0 && age * RING_C < RING_MAX) out.push([sx, sy, age * RING_C, (1 - age * RING_C / RING_MAX) * 0.42]);
+    }
+  }
+  if (clicks) for (const c of clicks) {
+    const age = t - c.t0;
+    if (age > 0 && age * RING_C < RING_MAX + 40) out.push([c.x, c.y, age * RING_C, 0.5 * (1 - age / 6.5)]);
+  }
+  return out;
+}
+
+// Paint the acoustic field as a coarse fog: one low-res RGBA image (cell =
+// ~1/44 of the width), upscaled with smoothing. Shared by scenes II and III.
+function makeFog(gw, gh) {
+  const cvs = document.createElement("canvas");
+  cvs.width = gw; cvs.height = gh;
+  const c2 = cvs.getContext("2d");
+  return { cvs, c2, img: c2.createImageData(gw, gh), grid: new Float32Array(gw * gh) };
+}
+function paintFog(ctx, fog, t, clicks) {
+  const GW = fog.img.width, GH = fog.img.height;
+  const cw = W / GW, ch = H / GH;
+  fog.grid.fill(0);
+  // mottled density base: two drifting sinusoids interfere into patchy gas,
+  // so the plasma reads as a medium, not rings drawn on a flat backdrop
+  for (let j = 0; j < GH; j++) {
+    const rowBase = j * GW;
+    for (let i = 0; i < GW; i++) {
+      fog.grid[rowBase + i] += 0.34
+        + Math.sin(i * 0.55 + t * 0.5 + Math.sin(j * 0.47 - t * 0.33) * 1.6)
+        + Math.sin(j * 0.6 - t * 0.42 + Math.sin(i * 0.4 + t * 0.27) * 1.4) * 0.8;
+    }
+  }
+  for (const [rx, ry, r, amp] of emitRings(t, clicks)) {
+    const cx = rx * W, cy = ry * H;
+    const i0 = Math.max(0, Math.floor((cx - r - 2) / cw)), i1 = Math.min(GW - 1, Math.ceil((cx + r + 2) / cw));
+    for (let i = i0; i <= i1; i++) {
+      const j0 = Math.max(0, Math.floor((cy - r - 2) / ch)), j1 = Math.min(GH - 1, Math.ceil((cy + r + 2) / ch));
+      for (let j = j0; j <= j1; j++) {
+        const d = Math.hypot(i * cw + cw / 2 - cx, j * ch + ch / 2 - cy);
+        const u = r - d;
+        if (Math.abs(u) < RING_BAND) {
+          const v = amp * (1 - Math.abs(u) / RING_BAND);
+          fog.grid[j * GW + i] += u > 0 ? v : -0.55 * v; // compression + trailing rarefaction
+        }
+      }
+    }
+  }
+  const d8 = fog.img.data;
+  for (let i = 0; i < fog.grid.length; i++) {
+    const g = fog.grid[i], k = i * 4;
+    if (g > 0.22) { d8[k] = 255; d8[k + 1] = 160; d8[k + 2] = 80; d8[k + 3] = Math.min(150, (g - 0.22) * 200); }
+    else if (g < -0.10) { d8[k] = 50; d8[k + 1] = 110; d8[k + 2] = 210; d8[k + 3] = Math.min(120, (-g - 0.1) * 240); }
+    else d8[k + 3] = 0;
+  }
+  fog.c2.putImageData(fog.img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fog.cvs, 0, 0, GW, GH, 0, 0, W, H);
+}
+
+const FGW = 44, FGH = 26, WALKER_N = 56, TRAIL_MAX = 60, DOT_N = 2400;
+const plSt = { t: 3.1, live: true, fog: makeFog(FGW, FGH), clicks: [], walkers: [], dots: [] };
+function newWalker() {
+  const a = rng2() * 6.283, r = Math.sqrt(rng2()) * Math.min(W, H) * 0.42;
+  const w = { x: W / 2 + Math.cos(a) * r, y: H / 2 + Math.sin(a) * r,
+              a: rng2() * 6.283, leg: 14 + rng2() * 24, trail: [] };
+  // back-fill a short wandering history so the first painted frame reads as a path
+  let px = w.x, py = w.y, aa = w.a;
+  const pts = [];
+  for (let i = 0; i < 8; i++) {
+    const da = (rng2() - 0.5) * 2.4, dl = 6 + rng2() * 14;
+    aa += da; px -= Math.cos(aa) * dl; py -= Math.sin(aa) * dl;
+    pts.push([px, py]);
+  }
+  w.trail = pts.reverse();
+  return w;
+}
+for (let i = 0; i < WALKER_N; i++) plSt.walkers.push(newWalker());
+for (let i = 0; i < DOT_N; i++) {
+  plSt.dots.push({ x: rng2() * W, y: rng2() * H, vx: (rng2() - 0.5) * 10, vy: (rng2() - 0.5) * 10 });
+}
+const dotBuckets = [[], [], []]; // gas dots grouped by local compression
+
+function drawPlasma(dt) {
+  const S = plSt;
+  const sdt = S.live ? dt : 0;
+  const t = S.t; S.t += sdt;
+  p2.fillStyle = "#0a0d18"; p2.fillRect(0, 0, W, H);
+  paintFog(p2, S.fog, t, S.clicks);
+
+  // thin bright ring outlines inside the fog bands, for definition
+  p2.strokeStyle = "rgba(255,190,110,0.22)"; p2.lineWidth = 1.2;
+  p2.beginPath();
+  for (const [rx, ry, r] of emitRings(t, S.clicks)) {
+    if (r > 0.5) { p2.moveTo(rx * W + r, ry * H); p2.arc(rx * W, ry * H, r, 0, 6.2832); }
+  }
+  p2.stroke();
+
+  // photon paths: random walk with flow bias; trail = last 60 path samples
+  for (const w of S.walkers) {
+    let rem = 120 * sdt;
+    const tr = w.trail;
+    while (rem > 0.3) {
+      const step = Math.min(rem, w.leg, 4);
+      w.x += Math.cos(w.a) * step; w.y += Math.sin(w.a) * step;
+      tr.push([w.x, w.y]);
+      w.leg -= step; rem -= step;
+      if (w.leg <= 0) {
+        const fxv = flowX(w.x, w.y, t), fyv = flowY(w.x, w.y, t);
+        w.a = Math.random() < 0.45 ? Math.random() * 6.283
+          : Math.atan2(Math.sin(w.a) * 0.5 + fyv, Math.cos(w.a) * 0.5 + fxv) + (Math.random() - 0.5) * 1.4;
+        w.leg = 14 + Math.random() * 24;
+        tr.push(null); // break the polyline at each scattering
+      }
+    }
+    while (tr.length > TRAIL_MAX) tr.splice(0, tr.length - TRAIL_MAX);
+    if (w.x < -8 || w.x > W + 8 || w.y < -8 || w.y > H + 8) Object.assign(w, newWalker());
+  }
+  p2.strokeStyle = "rgba(255,235,200,0.5)"; p2.lineWidth = 1.3;
+  p2.beginPath();
+  for (const w of S.walkers) {
+    let pen = false;
+    for (const pt of w.trail) {
+      if (!pt) { pen = false; continue; }
+      if (!pen) { p2.moveTo(pt[0], pt[1]); pen = true; }
+      else p2.lineTo(pt[0], pt[1]);
+    }
+    if (pen) p2.lineTo(w.x, w.y);
+  }
+  p2.stroke();
+  p2.fillStyle = "rgba(255,244,220,0.9)"; // photon heads
+  p2.beginPath();
+  for (const w of S.walkers) p2.rect(w.x - 1.1, w.y - 1.1, 2.2, 2.2);
+  p2.fill();
+
+  // gas dots drift with the flow and brighten in compression bands
+  const cw = W / FGW, ch = H / FGH, grid = S.fog.grid;
+  for (const b of dotBuckets) b.length = 0;
+  for (const p of S.dots) {
+    const vx = p.vx + flowX(p.x, p.y, t) * 7, vy = p.vy + flowY(p.x, p.y, t) * 7;
+    p.x = (p.x + vx * sdt + W) % W; p.y = (p.y + vy * sdt + H) % H;
+    const gi = Math.min(FGH - 1, (p.y / ch) | 0) * FGW + Math.min(FGW - 1, (p.x / cw) | 0);
+    const g = grid[gi];
+    (g > 0.55 ? dotBuckets[2] : g > 0.33 ? dotBuckets[1] : dotBuckets[0]).push(p);
+  }
+  const bAlpha = [0.14, 0.34, 0.62];
+  for (let b = 0; b < 3; b++) {
+    p2.fillStyle = `rgba(175,195,240,${bAlpha[b]})`;
+    p2.beginPath();
+    for (const p of dotBuckets[b]) p2.rect(p.x, p.y, 1.6, 1.6);
+    p2.fill();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8) Scene III — timeline: 1 second → 380,000 years → today. One canvas,
+//    three regimes keyed to cosmic time (log scale; p 0..1 == 1s..13.8Gyr):
+//    the fire (opaque, hot, fast) → the fog thinning and light being released
+//    at recombination → transparent space: galaxies appear and the released
+//    CMB light streams inward, converging on us. Auto-loops; scrub to inspect.
+// ─────────────────────────────────────────────────────────────────────────────
+const TL_END_S = 17.639; // log10 seconds ≈ 13.8 Gyr
+const TL_P1 = 3.079 / TL_END_S; // ≈ 20 min: nucleosynthesis winds down
+const TL_P2 = 13.079 / TL_END_S; // ≈ 380,000 yr: recombination — light released
+function fmtAge(s) {
+  if (s < 90) return (s < 10 ? s.toFixed(1) : s.toFixed(0)) + (s < 2 ? " second" : " seconds");
+  if (s < 5400) return (s / 60).toFixed(1) + " minutes";
+  if (s < 1.7e6) return (s / 3600).toFixed(1) + " hours";
+  const y = s / 3.156e7;
+  if (y < 1500) return y.toFixed(0) + " years";
+  if (y < 1.5e6) return (y / 1e3).toFixed(1) + " thousand years";
+  return (y / 1e9).toFixed(1) + " billion years";
+}
+const ERAS = [
+  "the fire — no atoms, light trapped",
+  "the fog thins — recombination at 380,000 yr",
+  "transparent space — galaxies; the CMB arrives",
+];
+const tlSt = { p: 0, playing: true, era: -1, clock: "" };
+const tlSlider = document.getElementById("tlRange");
+const tlEra = document.getElementById("tlEra");
+const tlClock = document.getElementById("tlClock");
+const tlRead = document.getElementById("tlRead");
+
+const rng3 = mulberry32(0x77);
+const GAS3 = [];
+for (let i = 0; i < 1300; i++) GAS3.push({ x: rng3() * W, y: rng3() * H, vx: (rng3() - 0.5) * 8, vy: (rng3() - 0.5) * 8 });
+const gspr = [makeGalaxySprite("255,250,235", "255,205,130"), makeGalaxySprite("255,255,255", "150,180,255")];
+const GAL3 = [];
+for (let i = 0; i < 55; i++) {
+  GAL3.push({ u: rng3() * 2 - 1, v: rng3() * 2 - 1, s: 14 + rng3() * 26, a: 0.30 + rng3() * 0.45, sp: gspr[i % 2] });
+}
+const STREAM = []; // released CMB photons, streaming straight; one per screen point
+function reseedStream(s) {
+  s.x = rng3() * W; s.y = rng3() * H;
+  const a = rng3() * 6.283, v = 150 + rng3() * 160;
+  s.dx = Math.cos(a) * v; s.dy = Math.sin(a) * v;
+}
+for (let i = 0; i < 110; i++) { const s = {}; reseedStream(s); STREAM.push(s); }
+const ARRIVE = []; // the same light, today: converging on the observer
+for (let i = 0; i < 36; i++) ARRIVE.push({ a: rng3() * 6.283, r: 60 + rng3() * Math.hypot(W, H) * 0.55, v: 130 + rng3() * 140 });
+
+function drawTimeline(dt) {
+  if (tlSt.playing) {
+    tlSt.p += dt / 30;
+    if (tlSt.p > 1) { tlSt.p = 0; } // loop: "today" resets to the first second
+    tlSlider.value = String(Math.round(tlSt.p * 1000));
+  }
+  const p = tlSt.p, sdt = tlSt.playing ? dt : 0;
+  const secs = Math.pow(10, p * TL_END_S);
+  const era = p < TL_P1 ? 0 : p < TL_P2 ? 1 : 2;
+  if (era !== tlSt.era) { tlSt.era = era; tlEra.textContent = ERAS[era]; }
+  const ck = fmtAge(secs);
+  if (ck !== tlSt.clock) { tlSt.clock = ck; tlClock.textContent = "t = " + ck; tlRead.textContent = ck; }
+
+  const cx = W / 2, cy = H / 2, diag = Math.hypot(W, H);
+  tl.fillStyle = "#04060b"; tl.fillRect(0, 0, W, H);
+
+  // ── regime 1: the fire — an opaque glow, dense fast sparks ──
+  // (after recombination a faint afterglow lingers, thinning into transparent space)
+  const fogA = p < TL_P1 ? 1 : clamp01(1 - (p - TL_P1) / 0.42);
+  const glowA = Math.max(fogA, clamp01(0.18 * (1 - (p - 0.62) / 0.28)));
+  if (glowA > 0.01) {
+    const g = tl.createRadialGradient(cx, cy, 0, cx, cy, diag * 0.72);
+    g.addColorStop(0, `rgba(255,146,58,${(0.36 * glowA).toFixed(3)})`);
+    g.addColorStop(1, `rgba(70,24,8,${(0.18 * glowA).toFixed(3)})`);
+    tl.fillStyle = g; tl.fillRect(0, 0, W, H);
+  }
+  // acoustic rings fade in across the fog era (blue: the universe cooling)
+  const ringA = clamp01((p - 0.30) / 0.12) * clamp01(1 - (p - 0.70) / 0.12);
+  if (ringA > 0.01) {
+    tl.strokeStyle = `rgba(140,175,255,${(0.22 * ringA).toFixed(3)})`;
+    tl.lineWidth = 1.4; tl.beginPath();
+    for (const [rx, ry, r] of emitRings(p * 26, null)) {
+      if (r > 0.5) { tl.moveTo(rx * W + r, ry * H); tl.arc(rx * W, ry * H, r, 0, 6.2832); }
+    }
+    tl.stroke();
+  }
+  // one particle pool, three regimes: speed and color follow the era
+  // (0.2 keeps the fast era at ~200 px/s — churning, not teleporting)
+  const spd = (p < TL_P1 ? 80 : p < TL_P2 ? 24 : 5) * 0.2;
+  for (const q of GAS3) {
+    q.x = (q.x + (q.vx + flowX(q.x, q.y, p * 40 + 5) * 6) * spd * sdt + W) % W;
+    q.y = (q.y + (q.vy + flowY(q.x, q.y, p * 40 + 5) * 6) * spd * sdt + H) % H;
+  }  const hotA = clamp01(1 - (p - 0.30) / 0.40);
+  if (hotA > 0.01) {
+    tl.fillStyle = `rgba(255,190,120,${(0.30 * hotA).toFixed(3)})`;
+    tl.beginPath();
+    for (const q of GAS3) tl.rect(q.x, q.y, 1.5, 1.5);
+    tl.fill();
+    tl.fillStyle = `rgba(255,240,210,${(0.5 * hotA).toFixed(3)})`; // hot sparks
+    tl.beginPath();
+    for (let i = 0; i < GAS3.length; i += 7) { const q = GAS3[i]; tl.rect(q.x + 0.4, q.y + 0.4, 1.2, 1.2); }
+    tl.fill();
+  }
+
+  // ── the release: at recombination light travels straight and fast ──
+  const streamA = clamp01((p - 0.46) / 0.09) * clamp01(1 - (p - 0.80) / 0.08);
+  if (streamA > 0.01) {
+    const k = 1 + 18 * clamp01((p - 0.66) / 0.075);
+    tl.strokeStyle = `rgba(255,240,215,${(0.4 * streamA).toFixed(3)})`;
+    tl.lineWidth = 1.2;
+    tl.beginPath();
+    for (const s of STREAM) {
+      const nx = s.x + s.dx * sdt * k, ny = s.y + s.dy * sdt * k;
+      if (nx < -20 || nx > W + 20 || ny < -20 || ny > H + 20) { reseedStream(s); continue; }
+      s.x = nx; s.y = ny;
+      tl.moveTo(s.x, s.y);
+      tl.lineTo(s.x - s.dx * 0.5, s.y - s.dy * 0.5); // 0.5 s of straight trail
+    }
+    tl.stroke();
+  }
+
+  // ── regime 3: today — galaxies, a faint shell rim, the arriving CMB ──
+  const galA = clamp01((p - 0.54) / 0.16);
+  if (galA > 0.01) {
+    for (const g of GAL3) {
+      const x = cx + g.u * W * 0.52, y = cy + g.v * H * 0.52;
+      tl.globalAlpha = g.a * galA;
+      tl.drawImage(g.sp, x - g.s, y - g.s, g.s * 2, g.s * 2);
+    }
+    tl.globalAlpha = 1;
+    const coldA = clamp01((p - 0.52) / 0.26); // sparse cold stars
+    if (coldA > 0.01) {
+      tl.fillStyle = `rgba(205,220,255,${(0.34 * coldA).toFixed(3)})`;
+      tl.beginPath();
+      for (let i = 0; i < 240; i++) { const q = GAS3[i]; tl.rect(q.x, q.y, 1.3, 1.3); }
+      tl.fill();
+    }
+    const rimA = clamp01((p - 0.72) / 0.14); // echo of the shell you started outside
+    if (rimA > 0.01) {
+      tl.strokeStyle = `rgba(150,190,255,${(0.14 * rimA).toFixed(3)})`;
+      tl.lineWidth = 30; tl.beginPath();
+      tl.arc(cx, cy, Math.min(W, H) * 0.44, 0, 6.2832); tl.stroke();
+    }
+    const obA = clamp01((p - 0.70) / 0.14);
+    if (obA > 0.01) {
+      tl.globalAlpha = obA;
+      tl.strokeStyle = "rgba(255,235,190,0.35)"; // converging CMB photons
+      tl.lineWidth = 1.1;
+      tl.beginPath();
+      for (const ph of ARRIVE) {
+        ph.r -= ph.v * sdt * 2;
+        if (ph.r < 4) { ph.r = Math.hypot(W, H) * (0.4 + rng3() * 0.2); ph.a = rng3() * 6.283; }
+        const x = cx + Math.cos(ph.a) * ph.r, y = cy + Math.sin(ph.a) * ph.r;
+        const L = Math.min(46, ph.r); // tail points back along the incoming path
+        tl.moveTo(x, y);
+        tl.lineTo(x + Math.cos(ph.a) * L, y + Math.sin(ph.a) * L);
+      }
+      tl.stroke();
+      const R = 9, draw = R * (96 / 34);
+      tl.drawImage(earthSprite, cx - draw / 2, cy - draw / 2, draw, draw);
+      tl.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+      tl.fillStyle = "rgba(225,238,255,0.9)";
+      tl.shadowColor = "rgba(0,0,0,0.9)"; tl.shadowBlur = 3; tl.shadowOffsetY = 1;
+      tl.fillText("Earth — the observer: the CMB arrives here, now", cx + 22, cy - 18);
+      tl.shadowColor = "transparent"; tl.shadowBlur = 0; tl.shadowOffsetY = 0;
+      tl.globalAlpha = 1;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9) Scene gating + main loop. One rAF chain; a section animates only while
+//    ≥45% on screen (IntersectionObserver). Scene III replays from t=1s on
+//    each entry; scene II keeps its fog phase across visits.
+// ─────────────────────────────────────────────────────────────────────────────
+const live = { 1: true, 2: false, 3: false };
+let activeScene = 1; // what Space acts on
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver((es) => {
+    for (const e of es) {
+      const n = +e.target.dataset.scene;
+      if (e.intersectionRatio > 0.45) {
+        if (!live[n] && n === 3) { tlSt.p = 0; tlSt.playing = true; }
+        live[n] = true;
+        if (e.intersectionRatio > 0.6) activeScene = n;
+      } else live[n] = false;
+    }
+  }, { threshold: [0, 0.45, 0.6] });
+  for (const el of document.querySelectorAll(".scene")) io.observe(el);
+}
 let last = performance.now();
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
-  if (playing) {
-    tNow += dt * 0.35;
-    if (tNow >= T_NOW_MAX) tNow = 0;
-    updateTimeUI();
+  if (live[1]) {
+    if (playing) {
+      tNow += dt * 0.35;
+      if (tNow >= T_NOW_MAX) tNow = 0;
+      updateTimeUI();
+    }
+    const m = rotMatrix(yaw, pitch);
+    const rShell = shellRadius(tNow);
+    gl.uniformMatrix3fv(locRot, false, m);
+    gl.uniform1f(locAspect, W / H);
+    gl.uniform1f(locFov, FOV);
+    gl.uniform1f(locDrift, shellDrift(tNow));
+    gl.uniform1f(locShellR, rShell);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    fx.clearRect(0, 0, W, H);
+    drawGalaxies(m, rShell);
+    drawPhotons(m, rShell);
+    drawEarth(rShell); // after photons: streaks terminate behind the planet
   }
-  const m = rotMatrix(yaw, pitch);
-  const rShell = shellRadius(tNow);
-  gl.uniformMatrix3fv(locRot, false, m);
-  gl.uniform1f(locAspect, W / H);
-  gl.uniform1f(locFov, FOV);
-  gl.uniform1f(locDrift, shellDrift(tNow));
-  gl.uniform1f(locShellR, rShell);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
-  fx.clearRect(0, 0, W, H);
-  drawGalaxies(m, rShell);
-  drawPhotons(m, rShell);
-  drawEarth(rShell); // after photons: streaks terminate behind the planet
+  if (live[2]) drawPlasma(dt);
+  if (live[3]) drawTimeline(dt);
   requestAnimationFrame(frame);
 }
-updateTimeUI();
-requestAnimationFrame(frame);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8) Input
+// 10) Input
 // ─────────────────────────────────────────────────────────────────────────────
 slider.addEventListener("input", () => {
   tNow = parseFloat(slider.value);
   playing = false;
   updateTimeUI();
 });
+tlSlider.addEventListener("input", () => {
+  tlSt.p = parseInt(tlSlider.value, 10) / 1000;
+  tlSt.playing = false; // scrubbing = inspecting; Space resumes the march
+});
 window.addEventListener("keydown", (e) => {
-  if (e.code === "Space") { e.preventDefault(); playing = !playing; }
+  if (e.code !== "Space") return;
+  e.preventDefault();
+  if (activeScene === 1) playing = !playing;
+  else if (activeScene === 2) plSt.live = !plSt.live;
+  else tlSt.playing = !tlSt.playing;
+});
+p2c.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !plSt.live) return;
+  plSt.clicks.push({ x: e.offsetX, y: e.offsetY, t0: plSt.t });
+  if (plSt.clicks.length > 40) plSt.clicks.shift();
 });
 let dragging = false, lx = 0, ly = 0;
 window.addEventListener("pointerdown", (e) => {
@@ -619,12 +1067,19 @@ window.addEventListener("pointerdown", (e) => {
   dragging = true; lx = e.clientX; ly = e.clientY;
 });
 window.addEventListener("pointerup", () => { dragging = false; });
+window.addEventListener("pointercancel", () => { dragging = false; }); // page claimed the gesture
 window.addEventListener("pointermove", (e) => {
   if (!dragging) return;
   yaw += (e.clientX - lx) * 0.004;
   pitch = Math.max(-1.45, Math.min(1.45, pitch + (e.clientY - ly) * 0.004));
   lx = e.clientX; ly = e.clientY;
 });
+
+// first painted frame for the below-fold scenes, so they're never blank
+drawPlasma(0.016);
+drawTimeline(0.016);
+updateTimeUI();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
