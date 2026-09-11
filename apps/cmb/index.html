@@ -51,7 +51,8 @@
   html { height: 100%; scroll-snap-type: y proximity; background: #05070c; }
   body { margin: 0; min-height: 100%; overflow-y: scroll; }
   /* Three stacked full-height scenes; scroll to move between them. */
-  .scene { position: relative; height: 100vh; overflow: hidden; scroll-snap-align: start; }
+  /* 100dvh keeps the slider clear of mobile browser bars; vh is the fallback */
+  .scene { position: relative; height: 100vh; height: 100dvh; overflow: hidden; scroll-snap-align: start; }
   /* pan-y (not none): vertical touch-drag scrolls between scenes, horizontal drag still orbits. */
   .scene canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: pan-y; }
   #fx, .chip, .shint { pointer-events: none; }
@@ -426,7 +427,10 @@ function rotMatrix(yaw, pitch) {
 let W = 0, H = 0;
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth; H = window.innerHeight;
+  // clientWidth/Height, not innerWidth/innerHeight: the page now scrolls, and
+// on Windows/Linux the classic scrollbar lives INSIDE innerWidth — sizing by
+// it would make every canvas a scrollbar-width wider than the visible area
+W = document.documentElement.clientWidth; H = document.documentElement.clientHeight;
   for (const c of [glc, fxc, p2c, tlC]) { // all four canvases are viewport-sized
     c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
     c.style.width = W + "px"; c.style.height = H + "px";
