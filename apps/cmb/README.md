@@ -31,7 +31,10 @@ fast-churning **fire** (no atoms yet) → a **fog** that thins, where acoustic
 rings appear and, at recombination (380,000 years), released light starts
 streaming straight and fast → **transparent space**: sparse cold stars,
 galaxies, a faint echo of the shell rim, and the CMB arriving now —
-converging on Earth at the center. Scrub the slider to inspect any moment.
+converging on Earth at the center. Annotation bubbles with leader arrows name
+what you are looking at as each era passes — the gas particles, the sound
+rings, the released light, the first stars — fading in and out with the
+physics they describe. Scrub the slider to inspect any moment.
 
 ## Controls
 

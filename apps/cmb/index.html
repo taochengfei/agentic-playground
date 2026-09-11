@@ -29,6 +29,9 @@
   (an opaque fire) → 380,000 years (the fog thins; light is released at
   recombination) → today (transparent space, galaxies, and the released CMB
   light arriving at us now). The three scenes stack as full-height sections.
+  Scene III carries era-keyed annotation bubbles with leader arrows that name
+  what is on screen: the floating gas particles, the acoustic rings, the
+  released light, and finally the stars + arriving CMB.
   Controls:
     drag          — orbit the view around the shell (scene I; vertical touch
                     drags still scroll the page)
@@ -869,6 +872,80 @@ for (let i = 0; i < 110; i++) { const s = {}; reseedStream(s); STREAM.push(s); }
 const ARRIVE = []; // the same light, today: converging on the observer
 for (let i = 0; i < 36; i++) ARRIVE.push({ a: rng3() * 6.283, r: 60 + rng3() * Math.hypot(W, H) * 0.55, v: 130 + rng3() * 140 });
 
+// Explanatory bubbles: scrim box + leader line + arrowhead, anchored per
+// era. Each note lives over a cosmic-time window (fade in/out with the
+// physics it describes), so autoplay reads as narration and scrubbing shows
+// the right one. Two slots on the right, two on the left; anchors and text
+// shrink below 640px so nothing collides with the HUD panels.
+const NOTES = [
+  { win: [0.03, 0.36], anchor: [0.55, 0.16], smallAnchor: [0.04, 0.58], tgt: [0.34, 0.44],
+    txt: ["every pale dot is a particle of the", "gas — protons, electrons, light.", "Too hot to bind; the glow between", "them is light that can't get away."],
+    stxt: ["pale dots: protons, electrons,", "and trapped light — too hot to bind."] },
+  { win: [0.32, 0.71], anchor: [0.03, 0.42], smallAnchor: [0.03, 0.34], tgt: [0.52, 0.50], seed: true,
+    txt: ["faint rings: SOUND — waves of", "compression rippling outward, like", "ripples in a pond. Gravity squeezes", "the gas in, light pressure shoves out."],
+    stxt: ["rings: sound waves in the gas —", "gravity in, light pressure out."] },
+  { win: [0.50, 0.84], anchor: [0.58, 0.66], smallAnchor: [0.03, 0.68], tgt: [0.30, 0.46],
+    txt: ["at 380,000 yr atoms form: the fog", "clears. Light — free at last — crosses", "space in straight lines again."],
+    stxt: ["fog clears at 380,000 yr:", "light travels straight again."] },
+  { win: [0.70, 1.0], anchor: [0.55, 0.16], smallAnchor: [0.03, 0.50], tgt: [0.47, 0.44],
+    txt: ["sparse cool dots: the first stars and", "gas — matter clumped where the waves", "left it. The rays converging at center:", "the CMB, still arriving. Scene I is this."],
+    stxt: ["first stars + gas. The rays are", "the CMB — arriving now."] },
+];
+function drawNotes(p) {
+  const small = W < 640;
+  for (const n of NOTES) {
+    const fade = clamp01((p - n.win[0]) / 0.05) * clamp01((n.win[1] - p) / 0.05);
+    if (fade <= 0.01) continue;
+    tl.globalAlpha = fade;
+    const txt = small ? n.stxt : n.txt;
+    const fs = small ? 9 : 11;
+    tl.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+    const lh = fs + 4;
+    let wmax = 0;
+    for (const s of txt) wmax = Math.max(wmax, tl.measureText(s).width);
+    const [ax, ay] = small ? n.smallAnchor : n.anchor;
+    const x = Math.min(ax * W, W - wmax - 28), y = ay * H;
+    const bw = wmax + 18, bh = txt.length * lh + 8;
+    tl.fillStyle = "rgba(9,12,20,0.8)";
+    tl.strokeStyle = "rgba(255,255,255,0.16)";
+    tl.lineWidth = 1;
+    tl.beginPath();
+    if (tl.roundRect) tl.roundRect(x, y, bw, bh, 6); else tl.rect(x, y, bw, bh);
+    tl.fill(); tl.stroke();
+    tl.fillStyle = "rgba(228,236,255,0.95)";
+    for (let i = 0; i < txt.length; i++) tl.fillText(txt[i], x + 9, y + fs + 2 + i * lh);
+    // leader line + arrowhead pointing into the feature being described
+    const tx = n.tgt[0] * W, ty = n.tgt[1] * H;
+    const cxb = x + bw / 2, cyb = y + bh / 2;
+    const dx = tx - cxb, dy = ty - cyb;
+    const len = Math.hypot(dx, dy);
+    if (len > bw / 2 + 30) {
+      const ux = dx / len, uy = dy / len;
+      const ts = Math.min((bw / 2 + 5) / Math.max(Math.abs(ux), 1e-6), (bh / 2 + 5) / Math.max(Math.abs(uy), 1e-6));
+      const ha = Math.atan2(dy, dx);
+      tl.strokeStyle = "rgba(255,214,122,0.7)";
+      tl.lineWidth = 1.2;
+      tl.beginPath();
+      tl.moveTo(cxb + ux * ts, cyb + uy * ts);
+      tl.lineTo(tx, ty);
+      tl.moveTo(tx, ty); // arrowhead, ~24° each side
+      tl.lineTo(tx - Math.cos(ha - 0.42) * 9, ty - Math.sin(ha - 0.42) * 9);
+      tl.moveTo(tx, ty);
+      tl.lineTo(tx - Math.cos(ha + 0.42) * 9, ty - Math.sin(ha + 0.42) * 9);
+      tl.stroke();
+    }
+    if (n.seed) { // mark the overdense seed the rings expand from
+      tl.strokeStyle = "rgba(255,214,122,0.85)";
+      tl.lineWidth = 1.4;
+      tl.beginPath();
+      tl.arc(tx, ty, 9, 0, 6.2832);
+      tl.moveTo(tx - 3.5, ty); tl.lineTo(tx + 3.5, ty);
+      tl.moveTo(tx, ty - 3.5); tl.lineTo(tx, ty + 3.5);
+      tl.stroke();
+    }
+    tl.globalAlpha = 1;
+  }
+}
 function drawTimeline(dt) {
   if (tlSt.playing) {
     tlSt.p += dt / 30;
@@ -987,6 +1064,7 @@ function drawTimeline(dt) {
       tl.globalAlpha = 1;
     }
   }
+  drawNotes(p);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
